@@ -1,0 +1,259 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User management via Clerk, but we store additional metadata
+model User {
+  id            String    @id @default(cuid())
+  clerkId       String    @unique
+  email         String    @unique
+  name          String?
+  imageUrl      String?
+  plan          Plan      @default(FREE)
+  stripeCustomerId String? @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  workspaces    WorkspaceMember[]
+  posts         Post[]
+  accounts      SocialAccount[]
+  
+  @@map("users")
+}
+
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+  ENTERPRISE
+}
+
+model Workspace {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  ownerId     String
+  plan        Plan      @default(FREE)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  members     WorkspaceMember[]
+  accounts    SocialAccount[]
+  posts       Post[]
+  
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        MemberRole @default(MEMBER)
+  joinedAt    DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model SocialAccount {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  userId          String?
+  platform        Platform
+  accountName     String
+  accountHandle   String
+  profileImageUrl String?
+  accessToken     String
+  refreshToken    String?
+  followerCount   Int       @default(0)
+  isActive        Boolean   @default(true)
+  connectedAt     DateTime  @default(now())
+  lastSyncedAt    DateTime  @default(now())
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User?     @relation(fields: [userId], references: [id])
+  posts           Post[]
+
+  @@unique([workspaceId, platform, accountHandle])
+  @@map("social_accounts")
+}
+
+enum Platform {
+  X
+  INSTAGRAM
+  LINKEDIN
+  TIKTOK
+  YOUTUBE
+  FACEBOOK
+  THREADS
+  MASTODON
+  BLUESKY
+}
+
+model Post {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  accountId       String
+  createdById     String
+  
+  // Content
+  content         String
+  threadItems     String[]    @default([])
+  mediaUrls       String[]    @default([])
+  mediaType       MediaType   @default(NONE)
+  
+  // Publishing
+  status          PostStatus  @default(DRAFT)
+  scheduledFor    DateTime?
+  publishedAt     DateTime?
+  platformPostId  String?
+  postUrl         String?
+  
+  // Metadata
+  tags            String[]    @default([])
+  category        String?
+  aiGenerated     Boolean     @default(false)
+  
+  // Analytics (updated after publish)
+  impressions     Int?
+  engagements     Int?
+  likes           Int?
+  replies         Int?
+  reposts         Int?
+  clicks          Int?
+  
+  // Approval workflow
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account         SocialAccount @relation(fields: [accountId], references: [id])
+  createdBy       User        @relation(fields: [createdById], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([accountId, scheduledFor])
+  @@index([status, scheduledFor])
+  @@map("posts")
+}
+
+enum MediaType {
+  NONE
+  IMAGE
+  VIDEO
+  CAROUSEL
+  POLL
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  REJECTED
+}
+
+// Content library / media assets
+model MediaAsset {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  url           String
+  type          MediaType
+  size          Int       // bytes
+  width         Int?
+  height        Int?
+  tags          String[]  @default([])
+  uploadedById  String
+  createdAt     DateTime  @default(now())
+
+  @@map("media_assets")
+}
+
+// Templates for reusable content
+model Template {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  content       String
+  category      String?
+  tags          String[]  @default([])
+  isPublic      Boolean   @default(false)
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("templates")
+}
+
+// Analytics snapshots (daily aggregates)
+model AnalyticsSnapshot {
+  id            String    @id @default(cuid())
+  accountId     String
+  date          DateTime
+  
+  // Followers
+  followerCount Int
+  followerGrowth Int
+  
+  // Engagement
+  impressions   Int
+  engagements   Int
+  likes         Int
+  replies       Int
+  reposts       Int
+  clicks        Int
+  
+  // Calculated
+  engagementRate Decimal? @db.Decimal(5, 4)
+  
+  createdAt     DateTime  @default(now())
+
+  @@unique([accountId, date])
+  @@index([accountId, date])
+  @@map("analytics_snapshots")
+}
+
+// Activity log for audit trail
+model ActivityLog {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  userId        String?
+  action        String    // POST_CREATED, POST_PUBLISHED, etc.
+  entityType    String    // Post, Account, etc.
+  entityId      String?
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@map("activity_logs")
+}
