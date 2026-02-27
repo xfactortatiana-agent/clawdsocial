@@ -1,4 +1,7 @@
+"use client";
+
 import { VisualCalendar } from "@/components/calendar/VisualCalendar";
+import { ComposerModal } from "@/components/composer/ComposerModal";
 import { useState } from "react";
 
 // Mock data for demo
@@ -39,6 +42,17 @@ const mockPosts = [
 
 export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+    setIsComposerOpen(true);
+  };
+
+  const handleNewPost = () => {
+    setSelectedDate(new Date());
+    setIsComposerOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -62,7 +76,10 @@ export default function DashboardPage() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <button className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800">
+            <button 
+              onClick={handleNewPost}
+              className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800"
+            >
               New Post
             </button>
             <div className="w-8 h-8 bg-gradient-to-br from-slate-400 to-slate-600 rounded-full"></div>
@@ -79,24 +96,19 @@ export default function DashboardPage() {
 
         <VisualCalendar
           posts={mockPosts}
-          onDateClick={(date) => {
-            setSelectedDate(date);
-            console.log("Selected date:", date);
-          }}
+          onDateClick={handleDateClick}
           onPostClick={(post) => {
             console.log("Clicked post:", post);
           }}
         />
-
-        {selectedDate && (
-          <div className="mt-6 p-4 bg-white rounded-xl border border-slate-200">
-            <h3 className="font-semibold text-slate-900">
-              Posts for {selectedDate.toLocaleDateString()}
-            </h3>
-            <p className="text-slate-600">Click "New Post" to create content for this date</p>
-          </div>
-        )}
       </main>
+
+      {/* Composer Modal */}
+      <ComposerModal
+        isOpen={isComposerOpen}
+        onClose={() => setIsComposerOpen(false)}
+        initialDate={selectedDate}
+      />
     </div>
   );
 }
