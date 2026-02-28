@@ -40,10 +40,14 @@ async function refreshXToken(refreshToken: string) {
 
 // Fetch tweets from X API
 async function fetchTweets(userId: string, accessToken: string, type: 'posts' | 'replies', maxResults: number) {
-  // exclude=replies gets posts only, exclude=retweets gets everything including replies
-  const excludeParam = type === 'posts' ? 'exclude=replies,retweets' : 'exclude=retweets'
+  // Use exclude parameter to filter
+  // exclude=replies gets original posts only
+  // No exclude gets everything (including replies)
+  const excludeParam = type === 'posts' ? '&exclude=replies,retweets' : '&exclude=retweets'
   
-  const url = `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at,referenced_tweets&max_results=${maxResults}&${excludeParam}`
+  const url = `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at,referenced_tweets&max_results=${maxResults}${excludeParam}`
+  
+  console.log(`[Sync] Fetching ${type} from: ${url}`)
   
   const response = await fetch(url, {
     headers: { 
@@ -57,7 +61,18 @@ async function fetchTweets(userId: string, accessToken: string, type: 'posts' | 
   }
 
   const data = await response.json()
-  return data.data || []
+  const tweets = data.data || []
+  
+  console.log(`[Sync] Fetched ${tweets.length} ${type} (before filtering)`)
+  
+  // Additional client-side filtering to ensure correctness
+  if (type === 'posts') {
+    // Filter out any replies that might have slipped through
+    return tweets.filter((t: any) => !t.referenced_tweets?.some((ref: any) => ref.type === 'replied_to'))
+  } else {
+    // Only keep replies
+    return tweets.filter((t: any) => t.referenced_tweets?.some((ref: any) => ref.type === 'replied_to'))
+  }
 }
 
 // Process and save tweets to database
@@ -71,15 +86,10 @@ async function processTweets(
   let created = 0
   let updated = 0
 
+  console.log(`[Sync] Processing ${tweets.length} ${type}s`)
+
   for (const tweet of tweets) {
     try {
-      // Check if it's a reply by looking at referenced_tweets
-      const isReply = tweet.referenced_tweets?.some((ref: any) => ref.type === 'replied_to')
-      
-      // Skip if type doesn't match
-      if (type === 'post' && isReply) continue
-      if (type === 'reply' && !isReply) continue
-
       const existingPost = await prisma.post.findFirst({
         where: { platformPostId: tweet.id }
       })
