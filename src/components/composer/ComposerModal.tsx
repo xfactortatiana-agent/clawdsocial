@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { X, Sparkles, Image as ImageIcon, Calendar, Clock, Check, Loader2 } from "lucide-react";
+import { X, Sparkles, Image as ImageIcon, Calendar, Clock, Check, Loader2, Link2, Wand2 } from "lucide-react";
 
 interface ComposerModalProps {
   isOpen: boolean;
@@ -18,6 +18,21 @@ const allPlatforms = [
   { id: "tiktok", name: "TikTok", icon: "🎵" },
 ];
 
+const tones = [
+  { id: 'professional', name: 'Professional', description: 'Authoritative & business-focused' },
+  { id: 'casual', name: 'Casual', description: 'Friendly & conversational' },
+  { id: 'witty', name: 'Witty', description: 'Clever & humorous' },
+  { id: 'inspiring', name: 'Inspiring', description: 'Motivational & uplifting' },
+  { id: 'educational', name: 'Educational', description: 'Informative & teaching' },
+];
+
+const lengths = [
+  { id: 'short', name: 'Short', chars: '50-100 chars' },
+  { id: 'medium', name: 'Medium', chars: '100-200 chars' },
+  { id: 'long', name: 'Long', chars: '200-280 chars' },
+  { id: 'thread', name: 'Thread', chars: 'Multiple tweets' },
+];
+
 export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [] }: ComposerModalProps) {
   const [content, setContent] = useState("");
   const [platform, setPlatform] = useState("x");
@@ -29,6 +44,16 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [isPosting, setIsPosting] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  
+  // AI Generation states
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiTone, setAiTone] = useState("professional");
+  const [aiLength, setAiLength] = useState("medium");
+  const [aiType, setAiType] = useState<'single' | 'thread'>('single');
+  const [generatedOptions, setGeneratedOptions] = useState<string[]>([]);
+  const [urlInput, setUrlInput] = useState("");
+  const [activeTab, setActiveTab] = useState<'prompt' | 'url'>('prompt');
 
   // Get X accounts from connected accounts
   const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
@@ -54,6 +79,8 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
       setPostStatus(null);
       setContent("");
       setCharCount(0);
+      setShowAIGenerator(false);
+      setGeneratedOptions([]);
     }
   }, [isOpen]);
 
@@ -66,12 +93,66 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   };
 
   const handleGenerateAI = async () => {
+    if (!aiPrompt.trim() && activeTab === 'prompt') return;
+    if (!urlInput.trim() && activeTab === 'url') return;
+    
     setIsGenerating(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    const generated = "🚀 Excited to share what we've been building! AI-powered social media management that understands your brand voice.";
-    setContent(generated);
-    setCharCount(generated.length);
-    setIsGenerating(false);
+    setGeneratedOptions([]);
+
+    try {
+      let res;
+      
+      if (activeTab === 'url') {
+        res = await fetch('/api/ai/generate', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: urlInput,
+            tone: aiTone
+          })
+        });
+      } else {
+        res = await fetch('/api/ai/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: aiPrompt,
+            tone: aiTone,
+            length: aiLength,
+            type: aiType
+          })
+        });
+      }
+
+      const data = await res.json();
+
+      if (res.ok) {
+        if (data.result.type === 'thread' && data.result.tweets) {
+          setGeneratedOptions(data.result.tweets);
+        } else {
+          setGeneratedOptions([data.result.content]);
+        }
+      } else {
+        setPostStatus({
+          type: 'error',
+          message: data.error || 'AI generation failed'
+        });
+      }
+    } catch (err) {
+      setPostStatus({
+        type: 'error',
+        message: 'Network error during AI generation'
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const selectGeneratedContent = (text: string) => {
+    setContent(text);
+    setCharCount(text.length);
+    setShowAIGenerator(false);
+    setGeneratedOptions([]);
   };
 
   const handlePost = async (publishNow: boolean = false) => {
@@ -128,6 +209,173 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const selectedPlatform = availablePlatforms.find((p) => p.id === platform);
   const charLimit = platform === "x" ? 280 : 2200;
 
+  // AI Generator View
+  if (showAIGenerator) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAIGenerator(false)} />
+        
+        <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Wand2 className="w-5 h-5 text-violet-400" />
+              <h2 className="text-lg font-semibold text-white">AI Content Generator</h2>
+            </div>
+            <button onClick={() => setShowAIGenerator(false)} className="p-2 hover:bg-slate-800 rounded-lg">
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Tabs */}
+            <div className="flex gap-2 p-1 bg-slate-800/50 rounded-xl">
+              <button
+                onClick={() => setActiveTab('prompt')}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === 'prompt' 
+                    ? 'bg-violet-600 text-white' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                From Prompt
+              </button>
+              <button
+                onClick={() => setActiveTab('url')}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === 'url' 
+                    ? 'bg-violet-600 text-white' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                From URL
+              </button>
+            </div>
+
+            {activeTab === 'prompt' ? (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">What would you like to post about?</label>
+                  <textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="e.g., Launching our new AI feature that helps creators write better content..."
+                    className="w-full min-h-[100px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">Tone</label>
+                    <select
+                      value={aiTone}
+                      onChange={(e) => setAiTone(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    >
+                      {tones.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">Length</label>
+                    <select
+                      value={aiLength}
+                      onChange={(e) => setAiLength(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    >
+                      {lengths.map(l => (
+                        <option key={l.id} value={l.id}>{l.name} ({l.chars})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Format</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setAiType('single')}
+                      className={`flex-1 py-3 px-4 rounded-xl border transition-colors ${
+                        aiType === 'single'
+                          ? 'bg-violet-600/20 border-violet-500 text-violet-300'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      Single Post
+                    </button>
+                    <button
+                      onClick={() => setAiType('thread')}
+                      className={`flex-1 py-3 px-4 rounded-xl border transition-colors ${
+                        aiType === 'thread'
+                          ? 'bg-violet-600/20 border-violet-500 text-violet-300'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      Thread
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Paste URL to summarize</label>
+                <div className="relative">
+                  <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="https://example.com/article"
+                    className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleGenerateAI}
+              disabled={isGenerating || (activeTab === 'prompt' ? !aiPrompt.trim() : !urlInput.trim())}
+              className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Generate Content
+                </>
+              )}
+            </button>
+
+            {/* Generated Options */}
+            {generatedOptions.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-slate-300">Choose an option:</p>
+                {generatedOptions.map((option, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => selectGeneratedContent(option)}
+                    className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-violet-500 rounded-xl text-left text-slate-300 text-sm transition-colors"
+                  >
+                    {aiType === 'thread' ?> (
+                      <span className="text-violet-400 font-medium">{idx + 1}/</span>
+                    ) : null}
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main Composer View
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -217,14 +465,15 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-300">Content</label>
-              <button
-                onClick={handleGenerateAI}
-                disabled={isGenerating || !hasXConnected}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600/20 text-violet-400 rounded-lg text-sm hover:bg-violet-600/30 transition-colors disabled:opacity-50"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                {isGenerating ? "Generating..." : "Generate with AI"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAIGenerator(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  AI Generate
+                </button>
+              </div>
             </div>
             <textarea
               value={content}
