@@ -6,68 +6,46 @@ import { UserButton, useUser } from "@clerk/nextjs";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
-  const [xConnected, setXConnected] = useState(false);
-  const [xUsername, setXUsername] = useState("");
-  const [xPfp, setXPfp] = useState("");
+  const [xAccount, setXAccount] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [debugInfo, setDebugInfo] = useState("");
 
   // Check if user has X connected via Clerk
   useEffect(() => {
     if (user) {
-      // Debug: log full external accounts
-      console.log('Full external accounts:', user.externalAccounts);
-      
-      const debug = user.externalAccounts.map((a: any) => ({ 
-        provider: a.provider, 
-        username: a.username,
-        name: a.name,
-        id: a.id,
-        emailAddress: a.emailAddress,
-        imageUrl: a.imageUrl,
-        // Try to get more fields
-        ...Object.keys(a).reduce((acc, key) => {
-          try {
-            acc[key] = (a as any)[key];
-          } catch(e) {}
-          return acc;
-        }, {} as any)
-      }));
-      
-      setDebugInfo(JSON.stringify(debug, null, 2));
-      
-      const xAccount = user.externalAccounts.find(
+      // Find X/Twitter account - provider could be 'x' or 'twitter'
+      const foundAccount = user.externalAccounts.find(
         (account) => account.provider === 'x' || account.provider === 'twitter'
       );
       
-      if (xAccount) {
-        setXConnected(true);
-        // Try different fields for username
-        const username = xAccount.username || 
-                        (xAccount as any).externalId || 
-                        (xAccount as any).accountId ||
-                        'unknown';
-        setXUsername(username);
-        setXPfp(xAccount.imageUrl || '');
-        
-        // Save to our database
-        saveXToDatabase(xAccount, username);
-      }
+      setXAccount(foundAccount || null);
       setIsLoading(false);
+      
+      // Save to our database if found and verified
+      if (foundAccount?.verification?.status === 'verified') {
+        saveXToDatabase(foundAccount);
+      }
     }
   }, [user]);
 
-  const saveXToDatabase = async (xAccount: any, username: string) => {
-    if (!user || !username || username === 'unknown') return;
+  const saveXToDatabase = async (account: any) => {
+    if (!user) return;
+    
+    // Get identifier using accountIdentifier() method or fallback to other fields
+    const identifier = account.accountIdentifier?.() || 
+                      account.username || 
+                      account.emailAddress ||
+                      account.providerUserId;
+    
+    if (!identifier) return;
     
     try {
       await fetch('/api/auth/x/clerk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username,
-          name: xAccount.name || username,
-          pfp: xAccount.imageUrl
+          username: identifier,
+          name: account.name || account.firstName || identifier,
+          pfp: account.imageUrl
         })
       });
     } catch (err) {
@@ -76,20 +54,33 @@ export default function SettingsPage() {
   };
 
   const handleConnectX = () => {
-    if (user) {
-      // @ts-ignore
-      user.createExternalAccount({
-        strategy: 'oauth_x',
-        redirectUrl: window.location.href,
-      }).then((result: any) => {
-        console.log('createExternalAccount result:', result);
-        if (result.verification?.externalVerificationRedirectURL) {
-          window.location.href = result.verification.externalVerificationRedirectURL;
-        }
-      }).catch((err: any) => {
-        console.error('Failed to start X connection:', err);
-        alert('Error: ' + err.message);
-      });
+    if (!user) return;
+    
+    // Use 'oauth_x' strategy - Clerk will normalize to provider 'x'
+    // @ts-ignore
+    user.createExternalAccount({
+      strategy: 'oauth_x',
+      redirectUrl: window.location.href,
+    }).then((res: any) => {
+      if (res?.verification?.externalVerificationRedirectURL) {
+        window.location.href = res.verification.externalVerificationRedirectURL;
+      }
+    }).catch((err: any) => {
+      console.error('Error:', err);
+      alert('Error: ' + err.message);
+    });
+  };
+
+  const handleDisconnectX = async () => {
+    if (!xAccount) return;
+    
+    try {
+      await xAccount.destroy();
+      await user?.reload();
+      setXAccount(null);
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
+      alert('Failed to disconnect. Try again.');
     }
   };
 
@@ -100,6 +91,12 @@ export default function SettingsPage() {
       </div>
     );
   }
+
+  const isVerified = xAccount?.verification?.status === 'verified';
+  const displayName = xAccount?.accountIdentifier?.() || 
+                     xAccount?.username || 
+                     xAccount?.emailAddress ||
+                     'Connected';
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -126,7 +123,7 @@ export default function SettingsPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
             <p className="text-sm text-slate-400">Link your social media accounts</p>
@@ -135,8 +132,12 @@ export default function SettingsPage() {
           <div className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                {xPfp ? (
-                  <img src={xPfp} alt={xUsername} className="w-12 h-12 rounded-xl object-cover" />
+                {xAccount?.imageUrl ? (
+                  <img 
+                    src={xAccount.imageUrl} 
+                    alt={displayName} 
+                    className="w-12 h-12 rounded-xl object-cover" 
+                  />
                 ) : (
                   <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
                     <span className="text-2xl">𝕏</span>
@@ -144,16 +145,23 @@ export default function SettingsPage() {
                 )}
                 <div>
                   <p className="font-medium text-white">X (Twitter)</p>
-                  {xConnected ? (
-                    <p className="text-sm text-emerald-400">Connected as @{xUsername}</p>
+                  {xAccount ? (
+                    <p className="text-sm text-emerald-400">
+                      {isVerified ? 'Connected' : 'Pending'} as {displayName}
+                    </p>
                   ) : (
                     <p className="text-sm text-slate-500">Not connected</p>
                   )}
                 </div>
               </div>
               
-              {xConnected ? (
-                <span className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm">Connected ✓</span>
+              {xAccount ? (
+                <button
+                  onClick={handleDisconnectX}
+                  className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-600/30"
+                >
+                  Disconnect
+                </button>
               ) : (
                 <button
                   onClick={handleConnectX}
@@ -164,12 +172,6 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
-        </div>
-
-        {/* Debug info */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-          <p className="text-sm text-slate-400 mb-2">Debug Info:</p>
-          <pre className="text-xs text-slate-500 overflow-auto max-h-60">{debugInfo || 'No external accounts'}</pre>
         </div>
       </main>
     </div>
