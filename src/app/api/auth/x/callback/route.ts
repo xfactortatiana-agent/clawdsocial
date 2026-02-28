@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db'
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
 
-// Build redirect URI correctly
 const getRedirectUri = () => {
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}/api/auth/x/callback`
@@ -19,26 +18,38 @@ export async function GET(request: Request) {
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
 
-  console.log('OAuth callback received:', { code: code?.slice(0, 10), state, error, errorDescription })
+  console.log('=== OAUTH CALLBACK DEBUG ===')
+  console.log('Full URL:', request.url)
+  console.log('Code:', code ? `${code.slice(0, 20)}...` : 'null')
+  console.log('Error from X:', error)
+  console.log('Error description:', errorDescription)
+  console.log('State:', state)
 
   // Check for OAuth errors from X
   if (error) {
-    console.error('OAuth error from X:', error, errorDescription)
-    return NextResponse.redirect(new URL(`/dashboard?error=${error}&desc=${encodeURIComponent(errorDescription || '')}`, request.url))
+    console.error('X returned error:', error, errorDescription)
+    return NextResponse.redirect(
+      new URL(`/dashboard?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
+    )
   }
 
   if (!code) {
+    console.error('No code received')
     return NextResponse.redirect(new URL('/dashboard?error=no_code', request.url))
   }
 
   if (!X_CLIENT_ID || !X_CLIENT_SECRET) {
-    console.error('Missing X_CLIENT_ID or X_CLIENT_SECRET')
+    console.error('Missing credentials')
     return NextResponse.redirect(new URL('/dashboard?error=missing_credentials', request.url))
   }
 
   try {
     const redirectUri = getRedirectUri()
-    console.log('Using redirect URI:', redirectUri)
+    console.log('Redirect URI:', redirectUri)
+
+    // Build auth header
+    const authHeader = `Basic ${Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString('base64')}`
+    console.log('Auth header length:', authHeader.length)
 
     // Exchange code for access token
     const tokenBody = new URLSearchParams({
@@ -55,27 +66,31 @@ export async function GET(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString('base64')}`
+        'Authorization': authHeader
       },
       body: tokenBody
     })
 
-    const tokenData = await tokenResponse.json()
+    console.log('Token response status:', tokenResponse.status)
+    
+    const responseText = await tokenResponse.text()
+    console.log('Token response body:', responseText)
+
+    let tokenData
+    try {
+      tokenData = JSON.parse(responseText)
+    } catch {
+      tokenData = { raw: responseText }
+    }
 
     if (!tokenResponse.ok) {
-      console.error('Token exchange failed:', {
-        status: tokenResponse.status,
-        error: tokenData
-      })
+      console.error('Token exchange failed:', tokenData)
       return NextResponse.redirect(
-        new URL(`/dashboard?error=token_exchange&details=${encodeURIComponent(JSON.stringify(tokenData))}`, request.url)
+        new URL(`/dashboard?error=token_exchange&status=${tokenResponse.status}`, request.url)
       )
     }
 
-    console.log('Token exchange successful:', { 
-      hasAccessToken: !!tokenData.access_token,
-      hasRefreshToken: !!tokenData.refresh_token 
-    })
+    console.log('Token exchange successful')
 
     // Get user info from X
     const userResponse = await fetch('https://api.twitter.com/2/users/me', {
@@ -93,46 +108,40 @@ export async function GET(request: Request) {
     const userData = await userResponse.json()
     const xUser = userData.data
 
-    console.log('Got X user:', xUser.username)
+    console.log('Got X user:', xUser?.username)
 
     // Store in database
-    try {
-      await prisma.socialAccount.upsert({
-        where: {
-          workspaceId_platform_accountHandle: {
-            workspaceId: 'default-workspace',
-            platform: 'X',
-            accountHandle: xUser.username
-          }
-        },
-        update: {
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
-          accountName: xUser.name,
-          profileImageUrl: xUser.profile_image_url,
-          lastSyncedAt: new Date()
-        },
-        create: {
+    await prisma.socialAccount.upsert({
+      where: {
+        workspaceId_platform_accountHandle: {
           workspaceId: 'default-workspace',
           platform: 'X',
-          accountHandle: xUser.username,
-          accountName: xUser.name,
-          profileImageUrl: xUser.profile_image_url,
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
-          isActive: true
+          accountHandle: xUser.username
         }
-      })
-      console.log('Saved to database successfully')
-    } catch (dbError) {
-      console.error('Database error:', dbError)
-      return NextResponse.redirect(new URL('/dashboard?error=database_error', request.url))
-    }
+      },
+      update: {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        accountName: xUser.name,
+        profileImageUrl: xUser.profile_image_url,
+        lastSyncedAt: new Date()
+      },
+      create: {
+        workspaceId: 'default-workspace',
+        platform: 'X',
+        accountHandle: xUser.username,
+        accountName: xUser.name,
+        profileImageUrl: xUser.profile_image_url,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        isActive: true
+      }
+    })
 
-    // Redirect back to dashboard with success
+    console.log('Saved to database, redirecting...')
     return NextResponse.redirect(new URL(`/dashboard?connected=x&username=${xUser.username}`, request.url))
   } catch (error) {
-    console.error('OAuth callback error:', error)
-    return NextResponse.redirect(new URL('/dashboard?error=oauth_failed', request.url))
+    console.error('Exception in callback:', error)
+    return NextResponse.redirect(new URL('/dashboard?error=exception', request.url))
   }
 }
