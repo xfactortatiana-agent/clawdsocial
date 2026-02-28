@@ -20,7 +20,8 @@ import {
   X
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
-import { format, isToday, isTomorrow, addDays } from "date-fns";
+import { format, isToday, isTomorrow } from "date-fns";
+import { ComposerModal } from "@/components/composer/ComposerModal";
 
 interface Post {
   id: string;
@@ -187,8 +188,8 @@ export default function DashboardPage() {
                   <Calendar className="w-5 h-5 text-violet-400" />
                   <h2 className="font-semibold text-white">Upcoming Posts</h2>
                 </div>
-                <Link href="/calendar" className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1">
-                  View Calendar
+                <Link href="/" className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1">
+                  View Full Calendar
                   <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>
@@ -380,21 +381,12 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Composer Modal - simplified placeholder */}
-      {showComposer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowComposer(false)} />
-          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Create Post</h2>
-              <button onClick={() => setShowComposer(false)}>
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-            <p className="text-slate-400">Composer component would render here</p>
-          </div>
-        </div>
-      )}
+      {/* Composer Modal */}
+      <ComposerModal
+        isOpen={showComposer}
+        onClose={() => setShowComposer(false)}
+        connectedAccounts={connectedAccounts}
+      />
     </div>
   );
 }
