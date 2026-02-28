@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserButton, useUser } from "@clerk/nextjs";
+import { RefreshCw, Loader2 } from "lucide-react";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
   const [xAccounts, setXAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success?: boolean; message?: string } | null>(null);
   const [error, setError] = useState("");
 
   // Fetch connected X accounts from our database
@@ -43,6 +46,44 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Failed to disconnect:', err);
       setError("Failed to disconnect. Please try again.");
+    }
+  };
+
+  const handleSyncAnalytics = async () => {
+    setIsSyncing(true);
+    setSyncResult(null);
+    setError("");
+
+    try {
+      const res = await fetch('/api/cron/sync-analytics', {
+        headers: {
+          'Authorization': 'Bearer b46d5e1b6f9d6d079c33d34f0b1ef4b744798933b1f70297b5eb94a4d9c1afcb'
+        }
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        const totalSynced = data.results?.reduce((sum: number, r: any) => sum + (r.synced || 0), 0) || 0;
+        setSyncResult({
+          success: true,
+          message: `Synced ${totalSynced} posts from X`
+        });
+        // Refresh accounts to show updated data
+        fetchXAccounts();
+      } else {
+        setSyncResult({
+          success: false,
+          message: data.error || 'Sync failed'
+        });
+      }
+    } catch (err) {
+      setSyncResult({
+        success: false,
+        message: 'Network error during sync'
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -85,7 +126,19 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+        {syncResult && (
+          <div className={`mb-6 p-4 rounded-xl ${
+            syncResult.success 
+              ? 'bg-emerald-500/10 border border-emerald-500/30' 
+              : 'bg-red-500/10 border border-red-500/30'
+          }`}>
+            <p className={`text-sm ${syncResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+              {syncResult.message}
+            </p>
+          </div>
+        )}
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
           <div className="px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
             <p className="text-sm text-slate-400">Link your social media accounts to start posting</p>
@@ -154,6 +207,49 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+
+        {/* Analytics Sync Section */}
+        {xAccounts.length > 0 && (
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-800">
+              <h2 className="font-semibold text-white">Analytics Sync</h2>
+              <p className="text-sm text-slate-400">Import your historical posts and analytics from X</p>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-300">
+                    Last synced: {xAccounts[0]?.lastSyncedAt 
+                      ? new Date(xAccounts[0].lastSyncedAt).toLocaleString() 
+                      : 'Never'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Automatically syncs every 6 hours
+                  </p>
+                </div>
+                
+                <button
+                  onClick={handleSyncAnalytics}
+                  disabled={isSyncing}
+                  className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {isSyncing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Sync Now
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
