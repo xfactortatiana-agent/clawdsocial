@@ -66,6 +66,8 @@ export default function SettingsPage() {
 
       if (res.ok && data.success) {
         const totalSynced = data.results?.reduce((sum: number, r: any) => sum + (r.synced || 0), 0) || 0;
+        const totalCreated = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
+        const totalUpdated = data.results?.reduce((sum: number, r: any) => sum + (r.updated || 0), 0) || 0;
         const errors = data.results?.filter((r: any) => r.error) || [];
         
         if (errors.length > 0) {
@@ -76,7 +78,7 @@ export default function SettingsPage() {
         } else {
           setSyncResult({
             success: true,
-            message: `Synced ${totalSynced} posts from X`
+            message: `Synced ${totalSynced} posts (${totalCreated} new, ${totalUpdated} updated)`
           });
         }
         // Refresh accounts to show updated data

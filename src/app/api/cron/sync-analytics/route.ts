@@ -133,9 +133,9 @@ export async function GET(request: Request) {
           }
         })
 
-        // Fetch recent tweets
+        // Fetch recent tweets (limit to 20 to save API costs)
         const tweetsResponse = await fetch(
-          `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at&max_results=100`,
+          `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at&max_results=20`,
           {
             headers: { 
               'Authorization': `Bearer ${accessToken}`,
@@ -145,18 +145,23 @@ export async function GET(request: Request) {
         )
 
         if (!tweetsResponse.ok) {
-          const errorData = await tweetsResponse.json()
-          console.error(`Failed to fetch tweets for ${account.accountHandle}:`, errorData)
+          const errorText = await tweetsResponse.text()
+          console.error(`Failed to fetch tweets for ${account.accountHandle}:`, errorText)
           results.push({ 
             account: account.accountHandle, 
-            error: `Tweets fetch failed: ${errorData.detail || tweetsResponse.status}` 
+            error: `Tweets fetch failed: ${tweetsResponse.status}` 
           })
           continue
         }
 
         const tweetsData = await tweetsResponse.json()
         const tweets = tweetsData.data || []
+        
+        console.log(`[Sync] Found ${tweets.length} tweets for @${account.accountHandle}`)
+        
         let synced = 0
+        let created = 0
+        let updated = 0
 
         // Update posts with analytics
         for (const tweet of tweets) {
@@ -165,19 +170,22 @@ export async function GET(request: Request) {
               where: { platformPostId: tweet.id }
             })
 
+            const postData = {
+              likes: tweet.public_metrics?.like_count || 0,
+              replies: tweet.public_metrics?.reply_count || 0,
+              reposts: tweet.public_metrics?.retweet_count || 0,
+              impressions: tweet.public_metrics?.impression_count || 0,
+              engagements: (tweet.public_metrics?.like_count || 0) + 
+                          (tweet.public_metrics?.reply_count || 0) + 
+                          (tweet.public_metrics?.retweet_count || 0)
+            }
+
             if (existingPost) {
               await prisma.post.update({
                 where: { id: existingPost.id },
-                data: {
-                  likes: tweet.public_metrics?.like_count || 0,
-                  replies: tweet.public_metrics?.reply_count || 0,
-                  reposts: tweet.public_metrics?.retweet_count || 0,
-                  impressions: tweet.public_metrics?.impression_count || 0,
-                  engagements: (tweet.public_metrics?.like_count || 0) + 
-                              (tweet.public_metrics?.reply_count || 0) + 
-                              (tweet.public_metrics?.retweet_count || 0)
-                }
+                data: postData
               })
+              updated++
             } else {
               // Create post record for historical tweets
               await prisma.post.create({
@@ -189,29 +197,28 @@ export async function GET(request: Request) {
                   status: 'PUBLISHED',
                   publishedAt: new Date(tweet.created_at),
                   platformPostId: tweet.id,
-                  likes: tweet.public_metrics?.like_count || 0,
-                  replies: tweet.public_metrics?.reply_count || 0,
-                  reposts: tweet.public_metrics?.retweet_count || 0,
-                  impressions: tweet.public_metrics?.impression_count || 0,
-                  engagements: (tweet.public_metrics?.like_count || 0) + 
-                              (tweet.public_metrics?.reply_count || 0) + 
-                              (tweet.public_metrics?.retweet_count || 0)
+                  ...postData
                 }
               })
+              created++
             }
             synced++
           } catch (err) {
-            console.error(`Error processing tweet ${tweet.id}:`, err)
+            console.error(`[Sync] Error processing tweet ${tweet.id}:`, err)
           }
         }
+
+        console.log(`[Sync] @${account.accountHandle}: ${synced} total (${created} new, ${updated} updated)`)
 
         results.push({ 
           account: account.accountHandle, 
           synced,
+          created,
+          updated,
           totalFetched: tweets.length
         })
       } catch (err) {
-        console.error(`Error syncing ${account.accountHandle}:`, err)
+        console.error(`[Sync] Error syncing ${account.accountHandle}:`, err)
         results.push({ 
           account: account.accountHandle, 
           error: err instanceof Error ? err.message : 'Sync failed' 
@@ -225,7 +232,7 @@ export async function GET(request: Request) {
       totalAccounts: accounts.length
     })
   } catch (err) {
-    console.error('Cron error:', err)
+    console.error('[Sync] Cron error:', err)
     return NextResponse.json({ 
       error: 'Internal server error',
       details: err instanceof Error ? err.message : 'Unknown error'
