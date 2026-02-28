@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { PostStatus } from '@prisma/client'
 
 // GET /api/posts - List all posts
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get('workspaceId')
-    const status = searchParams.get('status')
+    const statusParam = searchParams.get('status')
+    
+    // Validate status is a valid PostStatus enum value
+    const status = statusParam && Object.values(PostStatus).includes(statusParam as PostStatus)
+      ? (statusParam as PostStatus)
+      : undefined
     
     const posts = await prisma.post.findMany({
       where: {
@@ -67,7 +73,7 @@ export async function POST(request: Request) {
         scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
         tags: tags || [],
         category,
-        status: scheduledFor ? 'SCHEDULED' : 'DRAFT',
+        status: scheduledFor ? PostStatus.SCHEDULED : PostStatus.DRAFT,
       },
       include: {
         account: true,
