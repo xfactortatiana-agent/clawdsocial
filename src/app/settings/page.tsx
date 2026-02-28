@@ -65,19 +65,11 @@ export default function SettingsPage() {
       if (res?.verification?.externalVerificationRedirectURL) {
         window.location.href = res.verification.externalVerificationRedirectURL.href;
       } else {
-        setError("Failed to get X authorization URL. Please check your Clerk Dashboard X configuration.");
+        setError("Unable to connect X. Please try again later.");
       }
     } catch (err: any) {
       console.error('Error:', err);
-      
-      // Handle specific errors
-      if (err.message?.includes('already connected') || err.message?.includes('already exists')) {
-        setError("X is already connected to this account. Try refreshing the page.");
-      } else if (err.message?.includes('configuration') || err.message?.includes('credentials')) {
-        setError("X OAuth not configured in Clerk Dashboard. Please add your X API credentials.");
-      } else {
-        setError(err.message || "Failed to connect X. Please try again.");
-      }
+      setError("Unable to connect X. Please try again later.");
     }
   };
 
@@ -90,7 +82,7 @@ export default function SettingsPage() {
       setXAccount(null);
     } catch (err) {
       console.error('Failed to disconnect:', err);
-      setError("Failed to disconnect. Please refresh the page and try again.");
+      setError("Failed to disconnect. Please refresh and try again.");
     }
   };
 
@@ -189,21 +181,6 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-
-        {!xAccount && (
-          <div className="mt-6 p-4 bg-slate-900/30 border border-slate-800 rounded-xl">
-            <p className="text-sm text-slate-400 mb-2"><strong className="text-slate-300">Setup Required:</strong></p>
-            <p className="text-sm text-slate-400">
-              To connect X, you need to configure your X API credentials in the Clerk Dashboard:
-            </p>
-            <ol className="mt-2 text-sm text-slate-400 list-decimal list-inside space-y-1">
-              <li>Go to Clerk Dashboard → User & Authentication → Social Connections</li>
-              <li>Add X/Twitter connection and copy the Redirect URI</li>
-              <li>In X Developer Portal, set the Callback URL to the Redirect URI</li>
-              <li>Copy your X Client ID and Secret back to Clerk Dashboard</li>
-            </ol>
-          </div>
-        )}
       </main>
     </div>
   );
