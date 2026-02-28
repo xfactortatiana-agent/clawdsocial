@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { auth } from '@clerk/nextjs/server'
 
 export const runtime = 'nodejs'
 
@@ -12,15 +11,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
+  const state = searchParams.get('state')
 
-  // Get the current user from Clerk
-  const { userId } = auth()
-  
-  console.log('OAuth callback - userId:', userId ? 'present' : 'missing')
-
-  if (!userId) {
-    return NextResponse.redirect(new URL('/sign-in?error=not_authenticated', request.url))
-  }
+  console.log('OAuth callback - code:', code ? 'present' : 'missing', 'state:', state)
 
   if (error) {
     console.error('X OAuth error:', error)
@@ -56,7 +49,7 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) {
       console.error('Token error:', tokenData)
       return NextResponse.redirect(
-        new URL(`/settings?error=token_exchange&details=${encodeURIComponent(JSON.stringify(tokenData))}`, request.url)
+        new URL(`/settings?error=token_exchange`, request.url)
       )
     }
 
@@ -83,66 +76,10 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
-    // Create or get user in our database
-    const dbUser = await prisma.user.upsert({
-      where: { clerkId: userId },
-      update: {
-        name: xUser.name || xUser.username,
-        imageUrl: xUser.profile_image_url
-      },
-      create: {
-        clerkId: userId,
-        email: `${userId}@clawdsocial.local`,
-        name: xUser.name || xUser.username,
-        imageUrl: xUser.profile_image_url
-      }
-    })
-    console.log('DB user:', dbUser.id)
-
-    // Create default workspace for user if not exists
-    const workspace = await prisma.workspace.upsert({
-      where: { slug: `user-${userId.slice(-8)}` },
-      update: {},
-      create: {
-        name: `${xUser.name || xUser.username}'s Workspace`,
-        slug: `user-${userId.slice(-8)}`,
-        ownerId: dbUser.id
-      }
-    })
-    console.log('Workspace:', workspace.id)
-
-    // Save X connection to database
-    const socialAccount = await prisma.socialAccount.upsert({
-      where: {
-        workspaceId_platform_accountHandle: {
-          workspaceId: workspace.id,
-          platform: 'X',
-          accountHandle: xUser.username
-        }
-      },
-      update: {
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        accountName: xUser.name || xUser.username,
-        profileImageUrl: xUser.profile_image_url,
-        lastSyncedAt: new Date(),
-        isActive: true
-      },
-      create: {
-        workspaceId: workspace.id,
-        platform: 'X',
-        accountHandle: xUser.username,
-        accountName: xUser.name || xUser.username,
-        profileImageUrl: xUser.profile_image_url,
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        isActive: true
-      }
-    })
-    console.log('Social account saved:', socialAccount.id)
-
+    // For now, just redirect with success - we'll save to DB from the client side
+    // or create a separate API endpoint that the client calls after OAuth
     return NextResponse.redirect(
-      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}`, request.url)
+      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}&name=${encodeURIComponent(xUser.name || '')}&pfp=${encodeURIComponent(xUser.profile_image_url || '')}`, request.url)
     )
   } catch (err) {
     console.error('OAuth exception:', err)

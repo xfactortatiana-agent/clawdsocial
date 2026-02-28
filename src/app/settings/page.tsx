@@ -1,36 +1,75 @@
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/db";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs";
 
-export default async function SettingsPage() {
-  const { userId } = auth();
+export default function SettingsPage() {
+  const searchParams = useSearchParams();
+  const { user, isLoaded } = useUser();
+  const [xConnected, setXConnected] = useState(false);
+  const [xUsername, setXUsername] = useState("");
+  const [xName, setXName] = useState("");
+  const [xPfp, setXPfp] = useState("");
+  const [shinraConnected, setShinraConnected] = useState(false);
+  const [shinraUrl, setShinraUrl] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  if (!userId) {
-    redirect("/sign-in");
-  }
-
-  // Get user from database
-  const user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    include: {
-      workspaces: {
-        include: {
-          workspace: {
-            include: {
-              accounts: true
-            }
-          }
-        }
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const username = searchParams.get("username");
+    const name = searchParams.get("name");
+    const pfp = searchParams.get("pfp");
+    
+    if (connected === "x" && username) {
+      setXConnected(true);
+      setXUsername(username);
+      setXName(name || username);
+      setXPfp(pfp || "");
+      
+      // Save to database via API
+      if (user) {
+        saveXConnection(username, name || username, pfp || "");
       }
     }
-  });
+  }, [searchParams, user]);
 
-  // Get connected X accounts
-  const xAccounts = user?.workspaces.flatMap(w => 
-    w.workspace.accounts.filter(a => a.platform === 'X' && a.isActive)
-  ) || [];
+  const saveXConnection = async (username: string, name: string, pfp: string) => {
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/auth/x/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, name, pfp })
+      });
+      
+      if (response.ok) {
+        console.log('X connection saved to database');
+      } else {
+        console.error('Failed to save X connection');
+      }
+    } catch (err) {
+      console.error('Error saving X connection:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleXConnect = () => {
+    window.location.href = "/api/auth/x";
+  };
+
+  const handleShinraConnect = () => {
+    localStorage.setItem("shinra_url", shinraUrl);
+    setShinraConnected(true);
+  };
+
+  if (!isLoaded) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="text-slate-400">Loading...</div>
+    </div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -54,7 +93,7 @@ export default async function SettingsPage() {
             afterSignOutUrl="/"
             appearance={{
               elements: {
-                avatarBox: "w-10 h-10 rounded-full"
+                avatarBox: "w-10 h-10 rounded-full border border-slate-700"
               }
             }}
           />
@@ -71,48 +110,72 @@ export default async function SettingsPage() {
           </div>
 
           <div className="p-6">
-            {xAccounts.length > 0 ? (
-              xAccounts.map((account) => (
-                <div key={account.id} className="flex items-center justify-between py-4 border-b border-slate-800 last:border-0">
-                  <div className="flex items-center gap-4">
-                    {account.profileImageUrl ? (
-                      <img 
-                        src={account.profileImageUrl} 
-                        alt={account.accountName}
-                        className="w-12 h-12 rounded-xl object-cover"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
-                        <span className="text-2xl">𝕏</span>
-                      </div>
-                    )}
-                    <div>
-                      <p className="font-medium text-white">X (Twitter)</p>
-                      <p className="text-sm text-emerald-400">Connected as @{account.accountHandle}</p>
-                    </div>
-                  </div>
-                  <span className="px-3 py-1 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm">Connected ✓</span>
-                </div>
-              ))
-            ) : (
-              <div className="flex items-center justify-between py-4">
-                <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between py-4">
+              <div className="flex items-center gap-4">
+                {xPfp ? (
+                  <img 
+                    src={xPfp} 
+                    alt={xName}
+                    className="w-12 h-12 rounded-xl object-cover"
+                  />
+                ) : (
                   <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
                     <span className="text-2xl">𝕏</span>
                   </div>
-                  <div>
-                    <p className="font-medium text-white">X (Twitter)</p>
+                )}
+                <div>
+                  <p className="font-medium text-white">X (Twitter)</p>
+                  {xConnected ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-emerald-400">Connected as @{xUsername}</p>
+                      {isSaving && <span className="text-xs text-slate-500">Saving...</span>}
+                    </div>
+                  ) : (
                     <p className="text-sm text-slate-500">Not connected</p>
-                  </div>
+                  )}
                 </div>
-                <a
-                  href="/api/auth/x"
-                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
-                >
-                  Connect
-                </a>
               </div>
-            )}
+              <button
+                onClick={handleXConnect}
+                disabled={xConnected}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  xConnected
+                    ? "bg-emerald-600/20 text-emerald-400 cursor-default"
+                    : "bg-violet-600 text-white hover:bg-violet-700"
+                }`}
+              >
+                {xConnected ? "Connected ✓" : "Connect"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-white">ClawdCorp OS</h2>
+              <span className="px-2 py-0.5 bg-violet-600/20 text-violet-400 text-xs rounded-full">Beta</span>
+            </div>
+            <p className="text-sm text-slate-400">Connect to Shinra Mission Control</p>
+          </div>
+
+          <div className="p-6">
+            <div className="space-y-4">
+              <input
+                type="url"
+                value={shinraUrl}
+                onChange={(e) => setShinraUrl(e.target.value)}
+                placeholder="https://your-shinra.vercel.app"
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <button
+                onClick={handleShinraConnect}
+                disabled={!shinraUrl}
+                className="w-full px-4 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500"
+              >
+                {shinraConnected ? "Connected ✓" : "Connect to Shinra"}
+              </button>
+            </div>
           </div>
         </div>
       </main>
