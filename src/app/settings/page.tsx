@@ -54,7 +54,7 @@ export default function SettingsPage() {
       // @ts-ignore - createExternalAccount exists but types may not show it
       user.createExternalAccount({
         strategy: 'oauth_x',
-        redirect_url: window.location.href,
+        redirectUrl: window.location.href,
       }).then((result: any) => {
         if (result.verification?.externalVerificationRedirectURL) {
           window.location.href = result.verification.externalVerificationRedirectURL;
