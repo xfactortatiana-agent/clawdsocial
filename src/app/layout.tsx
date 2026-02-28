@@ -16,7 +16,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        baseTheme: undefined,
+      }}
+    >
       <html lang="en">
         <body className={inter.className}>
           {children}
