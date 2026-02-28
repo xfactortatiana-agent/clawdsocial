@@ -14,7 +14,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+  
   if (!OPENAI_API_KEY) {
+    console.error('OpenAI API key not configured')
     return NextResponse.json({ error: 'OpenAI not configured' }, { status: 500 })
   }
 
@@ -25,7 +28,7 @@ export async function POST(request: Request) {
       tone = 'professional',
       length = 'medium',
       includeHashtags = true,
-      type = 'single' // 'single' or 'thread'
+      type = 'single'
     } = body
 
     if (!prompt) {
@@ -144,7 +147,10 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+  
   if (!OPENAI_API_KEY) {
+    console.error('OpenAI API key not configured')
     return NextResponse.json({ error: 'OpenAI not configured' }, { status: 500 })
   }
 
