@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
-
-// Hardcode the stable URL
 const REDIRECT_URI = 'https://clawdsocial.vercel.app/api/auth/x/callback'
 
 export async function GET(request: Request) {
@@ -59,11 +58,40 @@ export async function GET(request: Request) {
     const userData = await userResponse.json()
     const xUser = userData.data
 
+    // Save to database
+    await prisma.socialAccount.upsert({
+      where: {
+        workspaceId_platform_accountHandle: {
+          workspaceId: 'default-workspace',
+          platform: 'X',
+          accountHandle: xUser.username
+        }
+      },
+      update: {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        accountName: xUser.name,
+        profileImageUrl: xUser.profile_image_url,
+        lastSyncedAt: new Date(),
+        isActive: true
+      },
+      create: {
+        workspaceId: 'default-workspace',
+        platform: 'X',
+        accountHandle: xUser.username,
+        accountName: xUser.name,
+        profileImageUrl: xUser.profile_image_url,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        isActive: true
+      }
+    })
+
     return NextResponse.redirect(
-      new URL(`/dashboard?connected=x&username=${xUser.username}`, request.url)
+      new URL(`/settings?connected=x&username=${xUser.username}`, request.url)
     )
   } catch (err) {
     console.error('OAuth error:', err)
-    return NextResponse.redirect(new URL('/dashboard?error=oauth_failed', request.url))
+    return NextResponse.redirect(new URL('/settings?error=oauth_failed', request.url))
   }
 }
