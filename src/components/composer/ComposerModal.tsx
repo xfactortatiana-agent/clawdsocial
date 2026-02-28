@@ -720,26 +720,95 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {/* AI Modes */}
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'generate', icon: Sparkles, label: 'Write for me' },
-                    { id: 'improve', icon: Flame, label: 'Make engaging' },
-                    { id: 'thread', icon: ListOrdered, label: 'To thread' },
-                    { id: 'hashtags', icon: Hash, label: 'Hashtags' },
-                  ].map((mode) => (
+                <div className="space-y-2">
+                  {/* Write Options */}
+                  <p className="text-xs text-slate-500 uppercase">Create</p>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      key={mode.id}
-                      onClick={() => setAiMode({ type: mode.id as any, prompt: '' })}
+                      onClick={() => setAiMode({ type: 'generate', prompt: '' })}
                       className={`p-3 rounded-xl border text-left transition-all ${
-                        aiMode.type === mode.id
+                        aiMode.type === 'generate'
                           ? 'bg-violet-600/20 border-violet-500 text-white'
                           : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
                       }`}
                     >
-                      <mode.icon className="w-4 h-4 mb-2" />
-                      <p className="text-xs font-medium">{mode.label}</p>
+                      <Sparkles className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">Write for me</p>
                     </button>
-                  ))}
+                    
+                    <button
+                      onClick={() => setAiMode({ type: 'thread', prompt: '' })}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        aiMode.type === 'thread'
+                          ? 'bg-violet-600/20 border-violet-500 text-white'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <ListOrdered className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">To thread</p>
+                    </button>
+                  </div>
+
+                  {/* Improve Options */}
+                  <p className="text-xs text-slate-500 uppercase mt-4">Improve</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        setAiMode({ type: 'improve', prompt: 'more engaging' });
+                        handleAIAction();
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        aiMode.type === 'improve' && aiMode.prompt === 'more engaging'
+                          ? 'bg-violet-600/20 border-violet-500 text-white'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <Flame className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">More engaging</p>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setAiMode({ type: 'improve', prompt: 'more concise' });
+                        handleAIAction();
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        aiMode.type === 'improve' && aiMode.prompt === 'more concise'
+                          ? 'bg-violet-600/20 border-violet-500 text-white'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <Scissors className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">More concise</p>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setAiMode({ type: 'improve', prompt: 'add a hook' });
+                        handleAIAction();
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        aiMode.type === 'improve' && aiMode.prompt === 'add a hook'
+                          ? 'bg-violet-600/20 border-violet-500 text-white'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <Zap className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">Add a hook</p>
+                    </button>
+                    
+                    <button
+                      onClick={() => setAiMode({ type: 'hashtags', prompt: '' })}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        aiMode.type === 'hashtags'
+                          ? 'bg-violet-600/20 border-violet-500 text-white'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <Hash className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">Hashtags</p>
+                    </button>
+                  </div>
                 </div>
 
                 {/* AI Input */}

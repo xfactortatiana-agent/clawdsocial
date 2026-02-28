@@ -27,10 +27,22 @@ Keep posts under 280 characters. Be punchy and memorable.`;
         break;
 
       case "improve":
-        systemPrompt = `You are a social media editor. Improve the given post to make it more engaging.
-Add hooks, make it punchier, use formatting (**bold**, *italic*).
-Return 3 variations of the improved post.`;
-        userPrompt = `Improve this post (focus on: ${prompt || "making it more engaging"}):
+        let improveInstruction = "";
+        if (prompt === "more engaging") {
+          improveInstruction = "Make this more engaging by adding curiosity gaps, emotional triggers, and strong calls to action. Use power words. Keep the core message but make it irresistible to click/engage.";
+        } else if (prompt === "more concise") {
+          improveInstruction = "Make this more concise and punchy. Remove fluff words, tighten sentences, get to the point faster. Every word should earn its place.";
+        } else if (prompt === "add a hook") {
+          improveInstruction = "Add a compelling hook at the beginning that stops the scroll. Use pattern interrupts, contrarian takes, or curiosity gaps. The first line must grab attention immediately.";
+        } else {
+          improveInstruction = prompt || "making it more engaging";
+        }
+        
+        systemPrompt = `You are a social media editor specializing in X posts. 
+Improve the given post based on the specific instruction.
+Use formatting (**bold**, *italic*) where it adds emphasis.
+Return 3 distinct variations, each under 280 characters.`;
+        userPrompt = `Improve this post (${improveInstruction}):
 
 ${currentContent}`;
         break;
