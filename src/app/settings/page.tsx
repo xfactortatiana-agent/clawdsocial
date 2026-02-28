@@ -15,12 +15,26 @@ export default function SettingsPage() {
   // Check if user has X connected via Clerk
   useEffect(() => {
     if (user) {
-      console.log('User external accounts:', user.externalAccounts);
-      setDebugInfo(JSON.stringify(user.externalAccounts.map((a: any) => ({ 
+      // Debug: log full external accounts
+      console.log('Full external accounts:', user.externalAccounts);
+      
+      const debug = user.externalAccounts.map((a: any) => ({ 
         provider: a.provider, 
         username: a.username,
-        name: a.name 
-      })), null, 2));
+        name: a.name,
+        id: a.id,
+        emailAddress: a.emailAddress,
+        imageUrl: a.imageUrl,
+        // Try to get more fields
+        ...Object.keys(a).reduce((acc, key) => {
+          try {
+            acc[key] = (a as any)[key];
+          } catch(e) {}
+          return acc;
+        }, {} as any)
+      }));
+      
+      setDebugInfo(JSON.stringify(debug, null, 2));
       
       const xAccount = user.externalAccounts.find(
         (account) => account.provider === 'x' || account.provider === 'twitter'
@@ -28,26 +42,31 @@ export default function SettingsPage() {
       
       if (xAccount) {
         setXConnected(true);
-        setXUsername(xAccount.username || '');
+        // Try different fields for username
+        const username = xAccount.username || 
+                        (xAccount as any).externalId || 
+                        (xAccount as any).accountId ||
+                        'unknown';
+        setXUsername(username);
         setXPfp(xAccount.imageUrl || '');
         
         // Save to our database
-        saveXToDatabase(xAccount);
+        saveXToDatabase(xAccount, username);
       }
       setIsLoading(false);
     }
   }, [user]);
 
-  const saveXToDatabase = async (xAccount: any) => {
-    if (!user || !xAccount.username) return;
+  const saveXToDatabase = async (xAccount: any, username: string) => {
+    if (!user || !username || username === 'unknown') return;
     
     try {
       await fetch('/api/auth/x/clerk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: xAccount.username,
-          name: xAccount.name || xAccount.username,
+          username: username,
+          name: xAccount.name || username,
           pfp: xAccount.imageUrl
         })
       });
@@ -150,7 +169,7 @@ export default function SettingsPage() {
         {/* Debug info */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
           <p className="text-sm text-slate-400 mb-2">Debug Info:</p>
-          <pre className="text-xs text-slate-500 overflow-auto">{debugInfo || 'No external accounts'}</pre>
+          <pre className="text-xs text-slate-500 overflow-auto max-h-60">{debugInfo || 'No external accounts'}</pre>
         </div>
       </main>
     </div>
