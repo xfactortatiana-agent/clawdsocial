@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { oauthStates } from './callback/route'
 
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const REDIRECT_URI = 'https://clawdsocial.vercel.app/api/auth/x/callback'
+
+// Import the store from callback route
+let oauthStates: Map<string, string>
+
+async function getOAuthStates() {
+  if (!oauthStates) {
+    const callbackModule = await import('./callback/route')
+    oauthStates = callbackModule.oauthStates
+  }
+  return oauthStates
+}
 
 export async function GET() {
   const { userId } = auth()
@@ -18,10 +28,8 @@ export async function GET() {
 
   const state = Math.random().toString(36).substring(2, 15)
   
-  // Store clerkId with state
-  oauthStates.set(state, userId)
-  
-  console.log('Starting OAuth for user:', userId.slice(0, 8), 'state:', state)
+  const states = await getOAuthStates()
+  states.set(state, userId)
 
   const authUrl = new URL('https://twitter.com/i/oauth2/authorize')
   authUrl.searchParams.set('response_type', 'code')
