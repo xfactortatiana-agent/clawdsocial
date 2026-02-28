@@ -188,8 +188,8 @@ export default function DashboardPage() {
                   <Calendar className="w-5 h-5 text-violet-400" />
                   <h2 className="font-semibold text-white">Upcoming Posts</h2>
                 </div>
-                <Link href="/" className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1">
-                  View Full Calendar
+                <Link href="/calendar" className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1">
+                  View Calendar
                   <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>
