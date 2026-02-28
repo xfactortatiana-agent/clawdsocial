@@ -8,25 +8,11 @@ export default function SettingsPage() {
   const { user, isLoaded } = useUser();
   const [xAccount, setXAccount] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [debugInfo, setDebugInfo] = useState("");
+  const [error, setError] = useState("");
 
   // Check if user has X connected via Clerk
   useEffect(() => {
     if (user) {
-      console.log('All external accounts:', user.externalAccounts);
-      
-      // Debug: show all accounts
-      const debug = user.externalAccounts.map((a: any) => ({
-        provider: a.provider,
-        providerUserId: a.providerUserId,
-        username: a.username,
-        emailAddress: a.emailAddress,
-        verification: a.verification?.status,
-        id: a.id
-      }));
-      setDebugInfo(JSON.stringify(debug, null, 2));
-      
-      // Find X/Twitter account
       const foundAccount = user.externalAccounts.find(
         (account) => account.provider === 'x' || account.provider === 'twitter'
       );
@@ -64,27 +50,35 @@ export default function SettingsPage() {
     }
   };
 
-  const handleConnectX = () => {
+  const handleConnectX = async () => {
     if (!user) return;
     
-    // @ts-ignore
-    user.createExternalAccount({
-      strategy: 'oauth_x',
-      redirectUrl: window.location.href,
-    }).then((res: any) => {
-      console.log('createExternalAccount result:', res);
+    setError("");
+    
+    try {
+      // @ts-ignore
+      const res = await user.createExternalAccount({
+        strategy: 'oauth_x',
+        redirectUrl: window.location.href,
+      });
+      
       if (res?.verification?.externalVerificationRedirectURL) {
         window.location.href = res.verification.externalVerificationRedirectURL;
-      }
-    }).catch((err: any) => {
-      console.error('Error:', err);
-      // Check if error is because already connected
-      if (err.message?.includes('already')) {
-        alert('X is already connected to this account');
       } else {
-        alert('Error: ' + err.message);
+        setError("Failed to get X authorization URL. Please check your Clerk Dashboard X configuration.");
       }
-    });
+    } catch (err: any) {
+      console.error('Error:', err);
+      
+      // Handle specific errors
+      if (err.message?.includes('already connected') || err.message?.includes('already exists')) {
+        setError("X is already connected to this account. Try refreshing the page.");
+      } else if (err.message?.includes('configuration') || err.message?.includes('credentials')) {
+        setError("X OAuth not configured in Clerk Dashboard. Please add your X API credentials.");
+      } else {
+        setError(err.message || "Failed to connect X. Please try again.");
+      }
+    }
   };
 
   const handleDisconnectX = async () => {
@@ -96,7 +90,7 @@ export default function SettingsPage() {
       setXAccount(null);
     } catch (err) {
       console.error('Failed to disconnect:', err);
-      alert('Failed to disconnect. Try refreshing the page.');
+      setError("Failed to disconnect. Please refresh the page and try again.");
     }
   };
 
@@ -139,10 +133,16 @@ export default function SettingsPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
-            <p className="text-sm text-slate-400">Link your social media accounts</p>
+            <p className="text-sm text-slate-400">Link your social media accounts to start posting</p>
           </div>
 
           <div className="p-6">
@@ -163,7 +163,7 @@ export default function SettingsPage() {
                   <p className="font-medium text-white">X (Twitter)</p>
                   {xAccount ? (
                     <p className="text-sm text-emerald-400">
-                      {isVerified ? '✓ Verified' : '⏳ Pending'} — {displayName}
+                      {isVerified ? '✓ Connected' : '⏳ Pending'} — {displayName}
                     </p>
                   ) : (
                     <p className="text-sm text-slate-500">Not connected</p>
@@ -190,11 +190,20 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Debug */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-          <p className="text-sm text-slate-400 mb-2">Debug (External Accounts):</p>
-          <pre className="text-xs text-slate-500 overflow-auto max-h-40">{debugInfo || 'None'}</pre>
-        </div>
+        {!xAccount && (
+          <div className="mt-6 p-4 bg-slate-900/30 border border-slate-800 rounded-xl">
+            <p className="text-sm text-slate-400 mb-2"><strong className="text-slate-300">Setup Required:</strong></p>
+            <p className="text-sm text-slate-400">
+              To connect X, you need to configure your X API credentials in the Clerk Dashboard:
+            </p>
+            <ol className="mt-2 text-sm text-slate-400 list-decimal list-inside space-y-1">
+              <li>Go to Clerk Dashboard → User & Authentication → Social Connections</li>
+              <li>Add X/Twitter connection and copy the Redirect URI</li>
+              <li>In X Developer Portal, set the Callback URL to the Redirect URI</li>
+              <li>Copy your X Client ID and Secret back to Clerk Dashboard</li>
+            </ol>
+          </div>
+        )}
       </main>
     </div>
   );
