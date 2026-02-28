@@ -14,12 +14,12 @@ export async function GET(request: Request) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/dashboard?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
+      new URL(`/settings?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
     )
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/dashboard?error=no_code', request.url))
+    return NextResponse.redirect(new URL('/settings?error=no_code', request.url))
   }
 
   try {
@@ -44,19 +44,34 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) {
       console.error('Token error:', tokenData)
       return NextResponse.redirect(
-        new URL(`/dashboard?error=token_exchange`, request.url)
+        new URL(`/settings?error=token_exchange`, request.url)
       )
     }
 
-    // Get user info from X
-    const userResponse = await fetch('https://api.twitter.com/2/users/me', {
+    console.log('Got access token:', tokenData.access_token ? 'yes' : 'no')
+
+    // Get user info from X - request more fields
+    const userResponse = await fetch('https://api.twitter.com/2/users/me?user.fields=profile_image_url,username,name', {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`
       }
     })
 
+    if (!userResponse.ok) {
+      const userError = await userResponse.text()
+      console.error('User info error:', userResponse.status, userError)
+      return NextResponse.redirect(new URL('/settings?error=user_info_failed', request.url))
+    }
+
     const userData = await userResponse.json()
+    console.log('User data from X:', JSON.stringify(userData))
+
     const xUser = userData.data
+
+    if (!xUser || !xUser.username) {
+      console.error('No username in response:', userData)
+      return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
+    }
 
     // Save to database
     await prisma.socialAccount.upsert({
@@ -70,7 +85,7 @@ export async function GET(request: Request) {
       update: {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
-        accountName: xUser.name,
+        accountName: xUser.name || xUser.username,
         profileImageUrl: xUser.profile_image_url,
         lastSyncedAt: new Date(),
         isActive: true
@@ -79,7 +94,7 @@ export async function GET(request: Request) {
         workspaceId: 'default-workspace',
         platform: 'X',
         accountHandle: xUser.username,
-        accountName: xUser.name,
+        accountName: xUser.name || xUser.username,
         profileImageUrl: xUser.profile_image_url,
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
@@ -87,11 +102,13 @@ export async function GET(request: Request) {
       }
     })
 
+    console.log('Saved user:', xUser.username)
+
     return NextResponse.redirect(
-      new URL(`/settings?connected=x&username=${xUser.username}`, request.url)
+      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}`, request.url)
     )
   } catch (err) {
     console.error('OAuth error:', err)
-    return NextResponse.redirect(new URL('/settings?error=oauth_failed', request.url))
+    return NextResponse.redirect(new URL('/settings?error=exception', request.url))
   }
 }
