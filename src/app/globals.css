@@ -44,6 +44,24 @@
   .animate-shimmer {
     animation: shimmer 2s linear infinite;
   }
+  
+  /* Mobile-safe hover states */
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  .hover-lift:hover {
+    @apply -translate-y-0.5;
+  }
+  
+  .hover-lift:active {
+    @apply translate-y-0;
+  }
+  
+  /* Touch-friendly tap targets */
+  .tap-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
 }
 
 @keyframes float {
@@ -56,10 +74,17 @@
   100% { background-position: 200% 0; }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - hidden on mobile */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
+}
+
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
 }
 
 ::-webkit-scrollbar-track {
@@ -83,7 +108,47 @@
   background-size: 60px 60px;
 }
 
+@media (max-width: 768px) {
+  .bg-grid {
+    background-size: 40px 40px;
+  }
+}
+
 /* Radial gradient overlay */
 .bg-radial {
   background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139, 92, 246, 0.15), transparent);
+}
+
+/* Mobile viewport fix */
+@supports (height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}
+
+/* Prevent text selection on interactive elements */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  @apply outline-none ring-2 ring-violet-500 ring-offset-2 ring-offset-slate-950;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

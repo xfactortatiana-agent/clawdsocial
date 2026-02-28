@@ -13,7 +13,9 @@ import {
   TrendingUp,
   Calendar,
   Send,
-  Reply
+  Reply,
+  Menu,
+  X
 } from "lucide-react";
 
 export default function AnalyticsPage() {
@@ -273,6 +275,8 @@ export default function AnalyticsPage() {
 }
 
 function Header() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
   return (
     <header className="bg-slate-900/50 border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -280,17 +284,36 @@ function Header() {
           <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-cyan-600 rounded-xl flex items-center justify-center">
             <BarChart3 className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-xl text-white">ClawdSocial</span>
+          <span className="font-bold text-xl text-white hidden sm:block">ClawdSocial</span>
         </Link>
 
-        <nav className="flex items-center gap-6">
+        {/* Desktop Nav */}
+        <nav className="hidden md:flex items-center gap-6">
           <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white">Calendar</Link>
           <Link href="/analytics" className="text-sm text-white">Analytics</Link>
           <Link href="/settings" className="text-sm text-slate-400 hover:text-white">Settings</Link>
         </nav>
-
-        <UserButton afterSignOutUrl="/" />
+        
+        {/* Mobile Menu Button */}
+        <div className="flex items-center gap-3">
+          <UserButton afterSignOutUrl="/" />
+          <button 
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-slate-400 hover:text-white"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
+      
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden px-4 py-3 border-t border-slate-800 space-y-2">
+          <Link href="/dashboard" className="block py-2 text-slate-400 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Calendar</Link>
+          <Link href="/analytics" className="block py-2 text-white" onClick={() => setMobileMenuOpen(false)}>Analytics</Link>
+          <Link href="/settings" className="block py-2 text-slate-400 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Settings</Link>
+        </div>
+      )}
     </header>
   );
 }

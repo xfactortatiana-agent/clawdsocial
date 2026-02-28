@@ -4,7 +4,7 @@ import { VisualCalendar } from "@/components/calendar/VisualCalendar";
 import { ComposerModal } from "@/components/composer/ComposerModal";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Calendar, Plus, Settings, BarChart3, FileText } from "lucide-react";
+import { Calendar, Plus, Settings, BarChart3, FileText, Menu, X } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 
 const mockPosts = [
@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Fetch connected accounts
   useEffect(() => {
@@ -63,17 +64,38 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900/50 border-r border-slate-800/50 z-40">
-        <div className="p-6">
-          <Link href="/" className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-cyan-600 rounded-xl flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl text-white">ClawdSocial</span>
-          </Link>
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-          <nav className="space-y-1">
+      {/* Sidebar */}
+      <aside className={`
+        fixed left-0 top-0 bottom-0 w-64 bg-slate-900/95 backdrop-blur-xl border-r border-slate-800/50 z-50
+        transform transition-transform duration-300 ease-in-out
+        lg:translate-x-0
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="p-4 lg:p-6 h-full flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-cyan-600 rounded-xl flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-bold text-xl text-white">ClawdSocial</span>
+            </Link>
+            <button 
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <nav className="space-y-1 flex-1">
             <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-violet-600/20 text-violet-300 rounded-xl">
               <Calendar className="w-5 h-5" />
               <span className="font-medium">Calendar</span>
@@ -93,7 +115,7 @@ export default function DashboardPage() {
           </nav>
 
           {/* Connected Accounts */}
-          <div className="mt-8 pt-6 border-t border-slate-800">
+          <div className="mt-6 pt-6 border-t border-slate-800">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Connected</p>
             
             {xAccounts.length > 0 ? (
@@ -116,6 +138,7 @@ export default function DashboardPage() {
             ) : (
               <Link 
                 href="/settings" 
+                onClick={() => setSidebarOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
                 <span>𝕏</span>
@@ -127,34 +150,42 @@ export default function DashboardPage() {
       </aside>
 
       {/* Main Content */}
-      <main className="ml-64">
+      <main className="lg:ml-64">
         {/* Header */}
-        <header className="h-16 border-b border-slate-800/50 flex items-center justify-between px-8">
-          <div>
-            <h1 className="text-xl font-semibold text-white">Content Calendar</h1>
-            <p className="text-sm text-slate-400">Schedule and manage your posts</p>
+        <header className="h-16 border-b border-slate-800/50 flex items-center justify-between px-4 lg:px-8">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 -ml-2 text-slate-400 hover:text-white"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-lg lg:text-xl font-semibold text-white">Content Calendar</h1>
+              <p className="hidden sm:block text-sm text-slate-400">Schedule and manage your posts</p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 lg:gap-4">
             {xAccounts.length > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-emerald-400">Ready to post</span>
+                <span className="text-sm text-emerald-400">Ready</span>
               </div>
             )}
             
             <button 
               onClick={handleNewPost}
-              className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
+              className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
             >
               <Plus className="w-4 h-4" />
-              New Post
+              <span className="hidden sm:inline">New Post</span>
             </button>
             <UserButton 
               afterSignOutUrl="/"
               appearance={{
                 elements: {
-                  avatarBox: "w-10 h-10 rounded-full border border-slate-700"
+                  avatarBox: "w-9 h-9 lg:w-10 lg:h-10 rounded-full border border-slate-700"
                 }
               }}
             />
@@ -162,8 +193,8 @@ export default function DashboardPage() {
         </header>
 
         {/* Calendar */}
-        <div className="p-8">
-          <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6">
+        <div className="p-4 lg:p-8">
+          <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-4 lg:p-6 overflow-x-auto">
             <VisualCalendar
               posts={mockPosts}
               onDateClick={handleDateClick}

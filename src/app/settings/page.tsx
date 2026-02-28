@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserButton, useUser } from "@clerk/nextjs";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, Menu, X, ArrowLeft } from "lucide-react";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success?: boolean; message?: string } | null>(null);
   const [error, setError] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Fetch connected X accounts from our database
   useEffect(() => {
@@ -35,7 +36,6 @@ export default function SettingsPage() {
   };
 
   const handleConnectX = () => {
-    // Use our custom OAuth flow
     window.location.href = '/api/auth/x';
   };
 
@@ -62,7 +62,6 @@ export default function SettingsPage() {
       });
 
       const data = await res.json();
-      console.log('Sync response:', data);
 
       if (res.ok && data.success) {
         const totalPosts = data.results?.reduce((sum: number, r: any) => sum + (r.posts?.synced || 0), 0) || 0;
@@ -81,7 +80,6 @@ export default function SettingsPage() {
             message: `Synced ${totalPosts} posts, ${totalReplies} replies • ${followerCount.toLocaleString()} followers`
           });
         }
-        // Refresh accounts to show updated data
         fetchXAccounts();
       } else {
         setSyncResult({
@@ -90,7 +88,6 @@ export default function SettingsPage() {
         });
       }
     } catch (err) {
-      console.error('Sync error:', err);
       setSyncResult({
         success: false,
         message: 'Network error during sync'
@@ -110,7 +107,34 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <header className="bg-slate-900/50 border-b border-slate-800">
+      {/* Mobile Header */}
+      <header className="lg:hidden bg-slate-900/50 border-b border-slate-800">
+        <div className="px-4 h-14 flex items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-2 text-slate-400 hover:text-white">
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-sm">Back</span>
+          </Link>
+          <span className="font-semibold text-white">Settings</span>
+          <button 
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 text-slate-400 hover:text-white"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+        
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="px-4 py-3 border-t border-slate-800 space-y-2">
+            <Link href="/dashboard" className="block py-2 text-slate-400 hover:text-white">Calendar</Link>
+            <Link href="/analytics" className="block py-2 text-slate-400 hover:text-white">Analytics</Link>
+            <Link href="/settings" className="block py-2 text-white">Settings</Link>
+          </div>
+        )}
+      </header>
+
+      {/* Desktop Header */}
+      <header className="hidden lg:block bg-slate-900/50 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-cyan-600 rounded-xl flex items-center justify-center">
@@ -123,6 +147,7 @@ export default function SettingsPage() {
 
           <nav className="flex items-center gap-6">
             <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white">Calendar</Link>
+            <Link href="/analytics" className="text-sm text-slate-400 hover:text-white">Analytics</Link>
             <Link href="/settings" className="text-sm text-white">Settings</Link>
           </nav>
 
@@ -130,8 +155,8 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+        <h1 className="text-xl lg:text-2xl font-bold text-white mb-6 lg:mb-8">Settings</h1>
 
         {error && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
@@ -152,14 +177,14 @@ export default function SettingsPage() {
         )}
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-slate-800">
+          <div className="px-4 lg:px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
-            <p className="text-sm text-slate-400">Link your social media accounts to start posting</p>
+            <p className="text-sm text-slate-400">Link your social media accounts</p>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 lg:p-6">
             {xAccounts.length === 0 ? (
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
                     <span className="text-2xl">𝕏</span>
@@ -172,7 +197,7 @@ export default function SettingsPage() {
                 
                 <button
                   onClick={handleConnectX}
-                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
+                  className="w-full sm:w-auto px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
                 >
                   Connect X
                 </button>
@@ -180,7 +205,7 @@ export default function SettingsPage() {
             ) : (
               <div className="space-y-4">
                 {xAccounts.map((account) => (
-                  <div key={account.id} className="flex items-center justify-between">
+                  <div key={account.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       {account.profileImageUrl ? (
                         <img 
@@ -197,22 +222,20 @@ export default function SettingsPage() {
                         <p className="font-medium text-white">X (Twitter)</p>
                         {account.isActive ? (
                           <div className="text-sm text-emerald-400">
-                            <p>✓ Connected — @{account.accountHandle}</p>
+                            <p>✓ @{account.accountHandle}</p>
                             <p className="text-xs text-emerald-400/70">
                               {account.followerCount?.toLocaleString() || 0} followers
                             </p>
                           </div>
                         ) : (
-                          <p className="text-sm text-amber-400">
-                            ⚠ Token expired — reconnect needed
-                          </p>
+                          <p className="text-sm text-amber-400">⚠ Reconnect needed</p>
                         )}
                       </div>
                     </div>
                     
                     <button
                       onClick={() => handleDisconnectX(account.id)}
-                      className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-600/30"
+                      className="w-full sm:w-auto px-4 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-600/30"
                     >
                       Disconnect
                     </button>
@@ -230,31 +253,28 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Analytics Sync Section */}
         {xAccounts.length > 0 && (
           <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-800">
+            <div className="px-4 lg:px-6 py-4 border-b border-slate-800">
               <h2 className="font-semibold text-white">Analytics Sync</h2>
-              <p className="text-sm text-slate-400">Import your historical posts and analytics from X</p>
+              <p className="text-sm text-slate-400">Import historical posts from X</p>
             </div>
 
-            <div className="p-6">
-              <div className="flex items-center justify-between">
+            <div className="p-4 lg:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <p className="text-sm text-slate-300">
                     Last synced: {xAccounts[0]?.lastSyncedAt 
                       ? new Date(xAccounts[0].lastSyncedAt).toLocaleString() 
                       : 'Never'}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Automatically syncs every 6 hours
-                  </p>
+                  <p className="text-xs text-slate-500 mt-1">Auto-syncs daily</p>
                 </div>
                 
                 <button
                   onClick={handleSyncAnalytics}
                   disabled={isSyncing}
-                  className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
                 >
                   {isSyncing ? (
                     <>
