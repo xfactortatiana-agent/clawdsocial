@@ -16,11 +16,14 @@ export async function GET(request: Request) {
   // Get the current user from Clerk
   const { userId } = auth()
   
+  console.log('OAuth callback - userId:', userId ? 'present' : 'missing')
+
   if (!userId) {
     return NextResponse.redirect(new URL('/sign-in?error=not_authenticated', request.url))
   }
 
   if (error) {
+    console.error('X OAuth error:', error)
     return NextResponse.redirect(
       new URL(`/settings?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
     )
@@ -48,11 +51,12 @@ export async function GET(request: Request) {
     })
 
     const tokenData = await tokenResponse.json()
+    console.log('Token response status:', tokenResponse.status)
 
     if (!tokenResponse.ok) {
       console.error('Token error:', tokenData)
       return NextResponse.redirect(
-        new URL(`/settings?error=token_exchange`, request.url)
+        new URL(`/settings?error=token_exchange&details=${encodeURIComponent(JSON.stringify(tokenData))}`, request.url)
       )
     }
 
@@ -64,27 +68,36 @@ export async function GET(request: Request) {
     })
 
     if (!userResponse.ok) {
+      const userError = await userResponse.text()
+      console.error('User info error:', userResponse.status, userError)
       return NextResponse.redirect(new URL('/settings?error=user_info_failed', request.url))
     }
 
     const userData = await userResponse.json()
+    console.log('X user data:', JSON.stringify(userData))
+    
     const xUser = userData.data
 
     if (!xUser || !xUser.username) {
+      console.error('No username in X response')
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
     // Create or get user in our database
     const dbUser = await prisma.user.upsert({
       where: { clerkId: userId },
-      update: {},
+      update: {
+        name: xUser.name || xUser.username,
+        imageUrl: xUser.profile_image_url
+      },
       create: {
         clerkId: userId,
-        email: 'temp@example.com', // Will be updated via Clerk webhook
+        email: `${userId}@clawdsocial.local`,
         name: xUser.name || xUser.username,
         imageUrl: xUser.profile_image_url
       }
     })
+    console.log('DB user:', dbUser.id)
 
     // Create default workspace for user if not exists
     const workspace = await prisma.workspace.upsert({
@@ -96,9 +109,10 @@ export async function GET(request: Request) {
         ownerId: dbUser.id
       }
     })
+    console.log('Workspace:', workspace.id)
 
     // Save X connection to database
-    await prisma.socialAccount.upsert({
+    const socialAccount = await prisma.socialAccount.upsert({
       where: {
         workspaceId_platform_accountHandle: {
           workspaceId: workspace.id,
@@ -125,12 +139,13 @@ export async function GET(request: Request) {
         isActive: true
       }
     })
+    console.log('Social account saved:', socialAccount.id)
 
     return NextResponse.redirect(
       new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}`, request.url)
     )
   } catch (err) {
-    console.error('OAuth error:', err)
+    console.error('OAuth exception:', err)
     return NextResponse.redirect(new URL('/settings?error=exception', request.url))
   }
 }

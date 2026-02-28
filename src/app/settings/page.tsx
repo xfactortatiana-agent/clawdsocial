@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { UserButton } from "@clerk/nextjs";
 
 export default async function SettingsPage() {
   const { userId } = auth();
@@ -49,7 +50,14 @@ export default async function SettingsPage() {
             <Link href="/settings" className="text-sm text-white">Settings</Link>
           </nav>
 
-          <div className="w-10 h-10 bg-gradient-to-br from-slate-600 to-slate-700 rounded-full"></div>
+          <UserButton 
+            afterSignOutUrl="/"
+            appearance={{
+              elements: {
+                avatarBox: "w-10 h-10 rounded-full"
+              }
+            }}
+          />
         </div>
       </header>
 
