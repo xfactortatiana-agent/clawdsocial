@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { UserButton, useUser, useClerk } from "@clerk/nextjs";
+import { UserButton, useUser, useSignIn } from "@clerk/nextjs";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
-  const { session } = useClerk();
+  const { signIn } = useSignIn();
   const [xConnected, setXConnected] = useState(false);
   const [xUsername, setXUsername] = useState("");
   const [xPfp, setXPfp] = useState("");
@@ -50,11 +50,11 @@ export default function SettingsPage() {
   };
 
   const handleConnectX = async () => {
-    if (!session) return;
+    if (!signIn) return;
     
     try {
-      // Use Clerk's authenticateWithRedirect for X
-      await session.authenticateWithRedirect({
+      // Use Clerk's authenticateWithRedirect
+      await signIn.authenticateWithRedirect({
         strategy: 'oauth_x',
         redirectUrl: '/settings',
         redirectUrlComplete: '/settings'
