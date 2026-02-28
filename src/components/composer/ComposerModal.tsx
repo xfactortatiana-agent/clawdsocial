@@ -38,6 +38,7 @@ interface ComposerModalProps {
   onClose: () => void;
   initialDate?: Date | null;
   connectedAccounts?: any[];
+  editingPost?: any | null;
 }
 
 interface Tweet {
@@ -94,7 +95,7 @@ function renderFormattedText(text: string): React.ReactNode {
   });
 }
 
-export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [] }: ComposerModalProps) {
+export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [], editingPost }: ComposerModalProps) {
   const [tweets, setTweets] = useState<Tweet[]>([{ id: '1', content: '', media: [] }]);
   const [activeTweetIndex, setActiveTweetIndex] = useState(0);
   const [isThread, setIsThread] = useState(false);
@@ -119,10 +120,23 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const hasXConnected = xAccounts.length > 0;
 
   useEffect(() => {
-    if (!isOpen) {
-      resetComposer();
+    if (isOpen) {
+      if (editingPost) {
+        // Load post for editing
+        setTweets([{
+          id: editingPost.id,
+          content: editingPost.content,
+          media: editingPost.media || []
+        }]);
+        if (editingPost.scheduledFor) {
+          setScheduledDate(format(new Date(editingPost.scheduledFor), "yyyy-MM-dd"));
+          setScheduledTime(format(new Date(editingPost.scheduledFor), "HH:mm"));
+        }
+      } else {
+        resetComposer();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, editingPost]);
 
   const resetComposer = () => {
     setTweets([{ id: '1', content: '', media: [] }]);
