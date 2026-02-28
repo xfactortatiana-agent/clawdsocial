@@ -65,9 +65,9 @@ export default function SettingsPage() {
       console.log('Sync response:', data);
 
       if (res.ok && data.success) {
-        const totalSynced = data.results?.reduce((sum: number, r: any) => sum + (r.synced || 0), 0) || 0;
-        const totalCreated = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
-        const totalUpdated = data.results?.reduce((sum: number, r: any) => sum + (r.updated || 0), 0) || 0;
+        const totalPosts = data.results?.reduce((sum: number, r: any) => sum + (r.posts?.synced || 0), 0) || 0;
+        const totalReplies = data.results?.reduce((sum: number, r: any) => sum + (r.replies?.synced || 0), 0) || 0;
+        const followerCount = data.results?.[0]?.followerCount || 0;
         const errors = data.results?.filter((r: any) => r.error) || [];
         
         if (errors.length > 0) {
@@ -78,7 +78,7 @@ export default function SettingsPage() {
         } else {
           setSyncResult({
             success: true,
-            message: `Synced ${totalSynced} posts (${totalCreated} new, ${totalUpdated} updated)`
+            message: `Synced ${totalPosts} posts, ${totalReplies} replies • ${followerCount.toLocaleString()} followers`
           });
         }
         // Refresh accounts to show updated data
@@ -196,9 +196,12 @@ export default function SettingsPage() {
                       <div>
                         <p className="font-medium text-white">X (Twitter)</p>
                         {account.isActive ? (
-                          <p className="text-sm text-emerald-400">
-                            ✓ Connected — @{account.accountHandle}
-                          </p>
+                          <div className="text-sm text-emerald-400">
+                            <p>✓ Connected — @{account.accountHandle}</p>
+                            <p className="text-xs text-emerald-400/70">
+                              {account.followerCount?.toLocaleString() || 0} followers
+                            </p>
+                          </div>
                         ) : (
                           <p className="text-sm text-amber-400">
                             ⚠ Token expired — reconnect needed

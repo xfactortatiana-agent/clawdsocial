@@ -38,6 +38,92 @@ async function refreshXToken(refreshToken: string) {
   }
 }
 
+// Fetch tweets from X API
+async function fetchTweets(userId: string, accessToken: string, type: 'posts' | 'replies', maxResults: number) {
+  // exclude=replies gets posts only, exclude=retweets gets everything including replies
+  const excludeParam = type === 'posts' ? 'exclude=replies,retweets' : 'exclude=retweets'
+  
+  const url = `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at,referenced_tweets&max_results=${maxResults}&${excludeParam}`
+  
+  const response = await fetch(url, {
+    headers: { 
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${type}: ${response.status}`)
+  }
+
+  const data = await response.json()
+  return data.data || []
+}
+
+// Process and save tweets to database
+async function processTweets(
+  tweets: any[], 
+  account: any, 
+  createdById: string, 
+  type: 'post' | 'reply'
+) {
+  let synced = 0
+  let created = 0
+  let updated = 0
+
+  for (const tweet of tweets) {
+    try {
+      // Check if it's a reply by looking at referenced_tweets
+      const isReply = tweet.referenced_tweets?.some((ref: any) => ref.type === 'replied_to')
+      
+      // Skip if type doesn't match
+      if (type === 'post' && isReply) continue
+      if (type === 'reply' && !isReply) continue
+
+      const existingPost = await prisma.post.findFirst({
+        where: { platformPostId: tweet.id }
+      })
+
+      const postData = {
+        likes: tweet.public_metrics?.like_count || 0,
+        replies: tweet.public_metrics?.reply_count || 0,
+        reposts: tweet.public_metrics?.retweet_count || 0,
+        impressions: tweet.public_metrics?.impression_count || 0,
+        engagements: (tweet.public_metrics?.like_count || 0) + 
+                    (tweet.public_metrics?.reply_count || 0) + 
+                    (tweet.public_metrics?.retweet_count || 0)
+      }
+
+      if (existingPost) {
+        await prisma.post.update({
+          where: { id: existingPost.id },
+          data: postData
+        })
+        updated++
+      } else {
+        await prisma.post.create({
+          data: {
+            workspaceId: account.workspaceId,
+            accountId: account.id,
+            createdById: createdById,
+            content: tweet.text,
+            status: 'PUBLISHED',
+            publishedAt: new Date(tweet.created_at),
+            platformPostId: tweet.id,
+            ...postData
+          }
+        })
+        created++
+      }
+      synced++
+    } catch (err) {
+      console.error(`[Sync] Error processing ${type} ${tweet.id}:`, err)
+    }
+  }
+
+  return { synced, created, updated }
+}
+
 // This endpoint syncs analytics from X - called by cron or manually
 export async function GET(request: Request) {
   // Verify cron secret
@@ -90,9 +176,9 @@ export async function GET(request: Request) {
           }
         }
 
-        // First get the user ID from username
+        // Get user info and follower count
         const userResponse = await fetch(
-          `https://api.twitter.com/2/users/by/username/${account.accountHandle}`,
+          `https://api.twitter.com/2/users/by/username/${account.accountHandle}?user.fields=public_metrics`,
           {
             headers: { 
               'Authorization': `Bearer ${accessToken}`,
@@ -105,7 +191,6 @@ export async function GET(request: Request) {
           const errorData = await userResponse.json()
           console.error(`Failed to fetch user for ${account.accountHandle}:`, errorData)
           
-          // If unauthorized, mark account as needing reconnection
           if (userResponse.status === 401) {
             await prisma.socialAccount.update({
               where: { id: account.id },
@@ -122,6 +207,7 @@ export async function GET(request: Request) {
 
         const userData = await userResponse.json()
         const userId = userData.data?.id
+        const followerCount = userData.data?.public_metrics?.followers_count || 0
 
         if (!userId) {
           results.push({ 
@@ -135,97 +221,28 @@ export async function GET(request: Request) {
         await prisma.socialAccount.update({
           where: { id: account.id },
           data: { 
-            followerCount: userData.data?.public_metrics?.followers_count || 0,
+            followerCount,
             lastSyncedAt: new Date()
           }
         })
 
-        // Fetch recent tweets (limit to 20 to save API costs)
-        const tweetsResponse = await fetch(
-          `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at&max_results=20`,
-          {
-            headers: { 
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        )
-
-        if (!tweetsResponse.ok) {
-          const errorText = await tweetsResponse.text()
-          console.error(`Failed to fetch tweets for ${account.accountHandle}:`, errorText)
-          results.push({ 
-            account: account.accountHandle, 
-            error: `Tweets fetch failed: ${tweetsResponse.status}` 
-          })
-          continue
-        }
-
-        const tweetsData = await tweetsResponse.json()
-        const tweets = tweetsData.data || []
-        
-        console.log(`[Sync] Found ${tweets.length} tweets for @${account.accountHandle}`)
-        
-        // Get workspace owner as createdBy
         const createdById = account.workspace?.ownerId || account.userId || ''
-        
-        let synced = 0
-        let created = 0
-        let updated = 0
 
-        // Update posts with analytics
-        for (const tweet of tweets) {
-          try {
-            const existingPost = await prisma.post.findFirst({
-              where: { platformPostId: tweet.id }
-            })
+        // Fetch posts (exclude replies)
+        const postsTweets = await fetchTweets(userId, accessToken, 'posts', 20)
+        const postsResult = await processTweets(postsTweets, account, createdById, 'post')
 
-            const postData = {
-              likes: tweet.public_metrics?.like_count || 0,
-              replies: tweet.public_metrics?.reply_count || 0,
-              reposts: tweet.public_metrics?.retweet_count || 0,
-              impressions: tweet.public_metrics?.impression_count || 0,
-              engagements: (tweet.public_metrics?.like_count || 0) + 
-                          (tweet.public_metrics?.reply_count || 0) + 
-                          (tweet.public_metrics?.retweet_count || 0)
-            }
+        // Fetch replies (include replies)
+        const repliesTweets = await fetchTweets(userId, accessToken, 'replies', 20)
+        const repliesResult = await processTweets(repliesTweets, account, createdById, 'reply')
 
-            if (existingPost) {
-              await prisma.post.update({
-                where: { id: existingPost.id },
-                data: postData
-              })
-              updated++
-            } else {
-              // Create post record for historical tweets
-              await prisma.post.create({
-                data: {
-                  workspaceId: account.workspaceId,
-                  accountId: account.id,
-                  createdById: createdById,
-                  content: tweet.text,
-                  status: 'PUBLISHED',
-                  publishedAt: new Date(tweet.created_at),
-                  platformPostId: tweet.id,
-                  ...postData
-                }
-              })
-              created++
-            }
-            synced++
-          } catch (err) {
-            console.error(`[Sync] Error processing tweet ${tweet.id}:`, err)
-          }
-        }
-
-        console.log(`[Sync] @${account.accountHandle}: ${synced} total (${created} new, ${updated} updated)`)
+        console.log(`[Sync] @${account.accountHandle}: ${postsResult.synced} posts, ${repliesResult.synced} replies, ${followerCount} followers`)
 
         results.push({ 
           account: account.accountHandle, 
-          synced,
-          created,
-          updated,
-          totalFetched: tweets.length
+          followerCount,
+          posts: postsResult,
+          replies: repliesResult
         })
       } catch (err) {
         console.error(`[Sync] Error syncing ${account.accountHandle}:`, err)
