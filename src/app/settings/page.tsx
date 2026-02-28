@@ -1,48 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser, SignInButton } from "@clerk/nextjs";
 
 export default function SettingsPage() {
-  const searchParams = useSearchParams();
-  const { user, isLoaded } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
   const [xConnected, setXConnected] = useState(false);
   const [xUsername, setXUsername] = useState("");
-  const [xName, setXName] = useState("");
   const [xPfp, setXPfp] = useState("");
-  const [shinraConnected, setShinraConnected] = useState(false);
-  const [shinraUrl, setShinraUrl] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const connected = searchParams.get("connected");
-    const username = searchParams.get("username");
-    const name = searchParams.get("name");
-    const pfp = searchParams.get("pfp");
-    
-    if (connected === "x" && username) {
-      setXConnected(true);
-      setXUsername(username);
-      setXName(name || username);
-      setXPfp(pfp || "");
+    // Check if user has X connected via Clerk
+    if (user) {
+      const xAccount = user.externalAccounts.find(
+        (account) => account.provider === 'x' || account.provider === 'twitter'
+      );
       
-      // Save to database via API
-      if (user) {
-        saveXConnection(username, name || username, pfp || "");
+      if (xAccount) {
+        setXConnected(true);
+        setXUsername(xAccount.username || '');
+        setXPfp(xAccount.imageUrl || '');
+        
+        // Save to our database
+        saveXConnection(xAccount.username || '', xAccount.imageUrl || '');
       }
     }
-  }, [searchParams, user]);
+  }, [user]);
 
-  const saveXConnection = async (username: string, name: string, pfp: string) => {
+  const saveXConnection = async (username: string, pfp: string) => {
+    if (!username) return;
+    
     setIsSaving(true);
     try {
-      const response = await fetch('/api/auth/x/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, name, pfp })
-      });
+      const response = await fetch('/api/auth/x/clerk');
       
       if (response.ok) {
         console.log('X connection saved to database');
@@ -57,18 +49,34 @@ export default function SettingsPage() {
   };
 
   const handleXConnect = () => {
-    window.location.href = "/api/auth/x";
-  };
-
-  const handleShinraConnect = () => {
-    localStorage.setItem("shinra_url", shinraUrl);
-    setShinraConnected(true);
+    // Use Clerk's built-in social connection
+    if (user) {
+      // Open Clerk's account connection UI
+      window.open(`https://accounts.clerk.dev/sign-in?redirect_url=${encodeURIComponent(window.location.href)}`, '_self');
+    }
   };
 
   if (!isLoaded) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="text-slate-400">Loading...</div>
-    </div>;
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-400 mb-4">Please sign in to access settings</p>
+          <SignInButton mode="modal">
+            <button className="px-6 py-3 bg-violet-600 text-white rounded-lg font-medium">
+              Sign In
+            </button>
+          </SignInButton>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -115,7 +123,7 @@ export default function SettingsPage() {
                 {xPfp ? (
                   <img 
                     src={xPfp} 
-                    alt={xName}
+                    alt={xUsername}
                     className="w-12 h-12 rounded-xl object-cover"
                   />
                 ) : (
@@ -135,46 +143,22 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
-              <button
-                onClick={handleXConnect}
-                disabled={xConnected}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  xConnected
-                    ? "bg-emerald-600/20 text-emerald-400 cursor-default"
-                    : "bg-violet-600 text-white hover:bg-violet-700"
-                }`}
-              >
-                {xConnected ? "Connected ✓" : "Connect"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-white">ClawdCorp OS</h2>
-              <span className="px-2 py-0.5 bg-violet-600/20 text-violet-400 text-xs rounded-full">Beta</span>
-            </div>
-            <p className="text-sm text-slate-400">Connect to Shinra Mission Control</p>
-          </div>
-
-          <div className="p-6">
-            <div className="space-y-4">
-              <input
-                type="url"
-                value={shinraUrl}
-                onChange={(e) => setShinraUrl(e.target.value)}
-                placeholder="https://your-shinra.vercel.app"
-                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-              <button
-                onClick={handleShinraConnect}
-                disabled={!shinraUrl}
-                className="w-full px-4 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500"
-              >
-                {shinraConnected ? "Connected ✓" : "Connect to Shinra"}
-              </button>
+              <div>
+                {xConnected ? (
+                  <span className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm font-medium">
+                    Connected ✓
+                  </span>
+                ) : (
+                  <a
+                    href="https://accounts.clerk.dev/user/profile/connections"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
+                  >
+                    Connect via Clerk
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
