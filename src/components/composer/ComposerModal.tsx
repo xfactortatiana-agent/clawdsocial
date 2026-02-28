@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import { 
   X, 
@@ -21,7 +21,8 @@ import {
   Eye,
   Trash2,
   Plus,
-  Send
+  Send,
+  Type
 } from "lucide-react";
 
 interface ComposerModalProps {
@@ -55,6 +56,46 @@ const lengths = [
 
 const emojis = ['🔥','💡','🚀','⚡️','✨','🎯','💪','🎉','👏','🤔','👀','💯','🙌','🔥','⚡️','🚀'];
 
+// Parse content with formatting to React elements
+function renderFormattedText(text: string): React.ReactNode {
+  if (!text) return null;
+  
+  // Split by patterns: **bold**, *italic*, `code`, #hashtag, @mention, https://links
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|#[\w]+|@[\w]+|https?:\/\/[^\s]+)/g);
+  
+  return parts.map((part, i) => {
+    // Bold: **text**
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="font-bold text-white">{part.slice(2, -2)}</strong>;
+    }
+    // Italic: *text*
+    if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+      return <em key={i} className="italic text-slate-200">{part.slice(1, -1)}</em>;
+    }
+    // Code: `text`
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} className="px-1.5 py-0.5 bg-slate-700 rounded text-sm font-mono text-cyan-400">{part.slice(1, -1)}</code>;
+    }
+    // Hashtag: #word
+    if (part.startsWith('#') && part.length > 1) {
+      return <span key={i} className="text-violet-400 hover:underline cursor-pointer">{part}</span>;
+    }
+    // Mention: @word
+    if (part.startsWith('@') && part.length > 1) {
+      return <span key={i} className="text-blue-400 hover:underline cursor-pointer">{part}</span>;
+    }
+    // Link: https://
+    if (part.startsWith('http')) {
+      return (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+          {part.length > 30 ? part.slice(0, 30) + '...' : part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [] }: ComposerModalProps) {
   const [content, setContent] = useState("");
   const [platform, setPlatform] = useState("x");
@@ -66,10 +107,11 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [isPosting, setIsPosting] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const [mediaFiles, setMediaFiles] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [activeFormat, setActiveFormat] = useState<'bold' | 'italic' | null>(null);
   
   // AI Generation states
   const [showAIGenerator, setShowAIGenerator] = useState(false);
@@ -118,14 +160,72 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
     setCursorPosition(e.target.selectionStart);
   };
 
-  const insertText = (text: string) => {
-    const before = content.slice(0, cursorPosition);
-    const after = content.slice(cursorPosition);
-    const newContent = before + text + after;
-    setContent(newContent);
-    setCharCount(newContent.length);
+  const insertText = (before: string, after: string = '') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+    
+    const newText = content.substring(0, start) + before + selectedText + after + content.substring(end);
+    setContent(newText);
+    setCharCount(newText.length);
+    
+    // Focus and set cursor position after the inserted text
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + before.length + selectedText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      setCursorPosition(newCursorPos);
+    }, 0);
+    
     setShowEmojiPicker(false);
-    textareaRef.current?.focus();
+  };
+
+  const toggleBold = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+    
+    // Check if already bold
+    const beforeSelection = content.substring(Math.max(0, start - 2), start);
+    const afterSelection = content.substring(end, Math.min(content.length, end + 2));
+    
+    if (beforeSelection === '**' && afterSelection === '**') {
+      // Remove bold
+      const newText = content.substring(0, start - 2) + selectedText + content.substring(end + 2);
+      setContent(newText);
+    } else {
+      // Add bold
+      insertText('**', '**');
+    }
+  };
+
+  const toggleItalic = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+    
+    // Check if already italic (but not bold)
+    const beforeSelection = content.substring(Math.max(0, start - 1), start);
+    const afterSelection = content.substring(end, Math.min(content.length, end + 1));
+    
+    if (beforeSelection === '*' && afterSelection === '*' && 
+        content.substring(Math.max(0, start - 2), start) !== '**') {
+      // Remove italic
+      const newText = content.substring(0, start - 1) + selectedText + content.substring(end + 1);
+      setContent(newText);
+    } else {
+      // Add italic
+      insertText('*', '*');
+    }
   };
 
   const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,7 +388,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
                     placeholder="e.g., Launching our new AI feature that helps creators write better content..."
-                    className="w-full min-h-[120px] px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+                    className="w-full min-h-[100px] px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                   />
                 </div>
 
@@ -486,16 +586,20 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
             {/* Editor Toolbar */}
             <div className="mx-6 mt-4 flex items-center gap-1 p-1 bg-slate-800 rounded-xl">
               <button 
-                onClick={() => insertText('**bold**')}
-                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
-                title="Bold"
+                onClick={toggleBold}
+                className={`p-2 rounded-lg transition-colors ${
+                  content.includes('**') ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                }`}
+                title="Bold (Ctrl+B)"
               >
                 <Bold className="w-4 h-4" />
               </button>
               <button 
-                onClick={() => insertText('*italic*')}
-                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
-                title="Italic"
+                onClick={toggleItalic}
+                className={`p-2 rounded-lg transition-colors ${
+                  content.match(/(?<!\*)\*[^*]+\*(?!\*)/) ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                }`}
+                title="Italic (Ctrl+I)"
               >
                 <Italic className="w-4 h-4" />
               </button>
@@ -528,7 +632,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     {emojis.map((emoji) => (
                       <button
                         key={emoji}
-                        onClick={() => insertText(emoji)}
+                        onClick={() => insertText(emoji, '')}
                         className="w-8 h-8 hover:bg-slate-700 rounded-lg flex items-center justify-center text-lg"
                       >
                         {emoji}
@@ -555,9 +659,9 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                 onChange={handleContentChange}
                 onKeyUp={(e) => setCursorPosition(e.currentTarget.selectionStart)}
                 onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
-                placeholder="What's on your mind?"
+                placeholder="What's on your mind? Use **bold** or *italic*"
                 disabled={!hasXConnected || isPosting}
-                className="w-full h-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 text-lg leading-relaxed"
+                className="w-full h-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 text-lg leading-relaxed font-mono"
               />
             </div>
 
@@ -571,6 +675,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     ) : (
                       <video src={media.url} className="w-full h-full object-cover" />
                     )}
+                    
                     <button
                       onClick={() => removeMedia(idx)}
                       className="absolute top-1 right-1 w-6 h-6 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -638,7 +743,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
             </div>
           </div>
 
-          {/* Right Side - Preview & Scheduling */}
+          {/* Right Side - Preview */}
           {showPreview && (
             <div className="w-80 border-l border-slate-800 bg-slate-900/30 p-6 overflow-y-auto">
               <h3 className="text-sm font-medium text-slate-300 mb-4">Preview</h3>
@@ -660,9 +765,9 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                   </div>
                 </div>
                 
-                <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">
-                  {content || 'Your post will appear here...'}
-                </p>
+                <div className="text-white text-sm leading-relaxed whitespace-pre-wrap">
+                  {content ? renderFormattedText(content) : <span className="text-slate-600">Your post will appear here...</span>}
+                </div>
                 
                 {mediaFiles.length > 0 && (
                   <div className="mt-3 grid grid-cols-2 gap-2">
