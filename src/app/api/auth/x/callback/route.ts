@@ -5,12 +5,8 @@ export const runtime = 'nodejs'
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
 
-const getRedirectUri = () => {
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}/api/auth/x/callback`
-  }
-  return 'http://localhost:3000/api/auth/x/callback'
-}
+// Hardcode the stable URL
+const REDIRECT_URI = 'https://clawdsocial.vercel.app/api/auth/x/callback'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -28,8 +24,6 @@ export async function GET(request: Request) {
   }
 
   try {
-    const redirectUri = getRedirectUri()
-    
     // Exchange code for access token
     const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
@@ -40,7 +34,7 @@ export async function GET(request: Request) {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: redirectUri,
+        redirect_uri: REDIRECT_URI,
         client_id: X_CLIENT_ID || '',
         code_verifier: 'challenge'
       })
@@ -65,10 +59,8 @@ export async function GET(request: Request) {
     const userData = await userResponse.json()
     const xUser = userData.data
 
-    // For now, just redirect with success (skip DB save in Edge)
-    // We'll save to DB from the client or a separate API call
     return NextResponse.redirect(
-      new URL(`/dashboard?connected=x&username=${xUser.username}&token=${encodeURIComponent(tokenData.access_token)}`, request.url)
+      new URL(`/dashboard?connected=x&username=${xUser.username}`, request.url)
     )
   } catch (err) {
     console.error('OAuth error:', err)
