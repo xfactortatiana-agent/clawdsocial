@@ -106,7 +106,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [isPosting, setIsPosting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<number | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiMode, setAiMode] = useState<AIMode>({ type: null, prompt: '' });
   const [isGenerating, setIsGenerating] = useState(false);
@@ -531,7 +531,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                       </button>
                       <div className="relative">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(showEmojiPicker === index ? null : index as any); }}
+                          onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(showEmojiPicker === index ? null : index); }}
                           className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
                           title="Emoji"
                         >
