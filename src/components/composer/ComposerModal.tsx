@@ -1,8 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { X, Sparkles, Image as ImageIcon, Calendar, Clock, Check, Loader2, Link2, Wand2 } from "lucide-react";
+import { 
+  X, 
+  Sparkles, 
+  Image as ImageIcon, 
+  Calendar, 
+  Clock, 
+  Check, 
+  Loader2,
+  Link2,
+  Wand2,
+  Smile,
+  Bold,
+  Italic,
+  List,
+  Hash,
+  AtSign,
+  Globe,
+  Eye,
+  Trash2,
+  Plus
+} from "lucide-react";
 
 interface ComposerModalProps {
   isOpen: boolean;
@@ -12,17 +32,17 @@ interface ComposerModalProps {
 }
 
 const allPlatforms = [
-  { id: "x", name: "X (Twitter)", icon: "𝕏" },
-  { id: "instagram", name: "Instagram", icon: "📷" },
-  { id: "linkedin", name: "LinkedIn", icon: "💼" },
-  { id: "tiktok", name: "TikTok", icon: "🎵" },
+  { id: "x", name: "X", icon: "𝕏", color: "#000000" },
+  { id: "instagram", name: "Instagram", icon: "📷", color: "#E4405F" },
+  { id: "linkedin", name: "LinkedIn", icon: "💼", color: "#0A66C2" },
+  { id: "tiktok", name: "TikTok", icon: "🎵", color: "#000000" },
 ];
 
 const tones = [
+  { id: 'match_voice', name: 'Match My Voice', description: 'Analyzes your past posts' },
   { id: 'professional', name: 'Professional', description: 'Authoritative & business-focused' },
   { id: 'casual', name: 'Casual', description: 'Friendly & conversational' },
-  { id: 'witty', name: 'Witty', description: 'Clever & humorous' },
-  { id: 'inspiring', name: 'Inspiring', description: 'Motivational & uplifting' },
+  { id: 'witty', name: 'Witty', description: 'Clever & sharp' },
   { id: 'educational', name: 'Educational', description: 'Informative & teaching' },
 ];
 
@@ -32,6 +52,8 @@ const lengths = [
   { id: 'long', name: 'Long', chars: '200-280 chars' },
   { id: 'thread', name: 'Thread', chars: 'Multiple tweets' },
 ];
+
+const emojis = ['🔥','💡','🚀','⚡️','✨','🎯','💪','🎉','👏','🤔','👀','💯','🙌','🔥','⚡️','🚀'];
 
 export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [] }: ComposerModalProps) {
   const [content, setContent] = useState("");
@@ -44,6 +66,10 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [isPosting, setIsPosting] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
   
   // AI Generation states
   const [showAIGenerator, setShowAIGenerator] = useState(false);
@@ -55,25 +81,23 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [urlInput, setUrlInput] = useState("");
   const [activeTab, setActiveTab] = useState<'prompt' | 'url'>('prompt');
 
-  // Get X accounts from connected accounts
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
   const hasXConnected = xAccounts.length > 0;
 
-  // Filter platforms based on connected accounts
   const availablePlatforms = allPlatforms.map(p => ({
     ...p,
     connected: p.id === 'x' ? hasXConnected : false,
     accounts: p.id === 'x' ? xAccounts : []
   }));
 
-  // Set default platform to X if connected
   useEffect(() => {
     if (hasXConnected && platform !== 'x') {
       setPlatform('x');
     }
   }, [hasXConnected, platform]);
 
-  // Clear status when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
       setPostStatus(null);
@@ -81,6 +105,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
       setCharCount(0);
       setShowAIGenerator(false);
       setGeneratedOptions([]);
+      setMediaFiles([]);
     }
   }, [isOpen]);
 
@@ -90,6 +115,32 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
     const text = e.target.value;
     setContent(text);
     setCharCount(text.length);
+    setCursorPosition(e.target.selectionStart);
+  };
+
+  const insertText = (text: string) => {
+    const before = content.slice(0, cursorPosition);
+    const after = content.slice(cursorPosition);
+    const newContent = before + text + after;
+    setContent(newContent);
+    setCharCount(newContent.length);
+    setShowEmojiPicker(false);
+    textareaRef.current?.focus();
+  };
+
+  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    Array.from(files).forEach(file => {
+      const url = URL.createObjectURL(file);
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      setMediaFiles(prev => [...prev, { url, type }]);
+    });
+  };
+
+  const removeMedia = (index: number) => {
+    setMediaFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleGenerateAI = async () => {
@@ -106,10 +157,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
         res = await fetch('/api/ai/generate', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: urlInput,
-            tone: aiTone
-          })
+          body: JSON.stringify({ url: urlInput, tone: aiTone })
         });
       } else {
         res = await fetch('/api/ai/generate', {
@@ -133,16 +181,10 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
           setGeneratedOptions([data.result.content]);
         }
       } else {
-        setPostStatus({
-          type: 'error',
-          message: data.error || 'AI generation failed'
-        });
+        setPostStatus({ type: 'error', message: data.error || 'AI generation failed' });
       }
     } catch (err) {
-      setPostStatus({
-        type: 'error',
-        message: 'Network error during AI generation'
-      });
+      setPostStatus({ type: 'error', message: 'Network error during AI generation' });
     } finally {
       setIsGenerating(false);
     }
@@ -172,7 +214,8 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
         body: JSON.stringify({
           content: content.trim(),
           platform: 'X',
-          scheduledFor
+          scheduledFor,
+          mediaUrls: mediaFiles.map(m => m.url)
         })
       });
 
@@ -181,45 +224,38 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
       if (res.ok) {
         setPostStatus({
           type: 'success',
-          message: publishNow 
-            ? 'Post published successfully!' 
-            : 'Post scheduled successfully!'
+          message: publishNow ? 'Post published!' : 'Post scheduled!'
         });
-        setContent("");
-        setCharCount(0);
-        setTimeout(() => {
-          onClose();
-        }, 1500);
+        setTimeout(() => onClose(), 1500);
       } else {
-        setPostStatus({
-          type: 'error',
-          message: data.error || data.details || 'Failed to post. Please try again.'
-        });
+        setPostStatus({ type: 'error', message: data.error || 'Failed to post' });
       }
     } catch (err) {
-      setPostStatus({
-        type: 'error',
-        message: 'Network error. Please try again.'
-      });
+      setPostStatus({ type: 'error', message: 'Network error' });
     } finally {
       setIsPosting(false);
     }
   };
 
-  const selectedPlatform = availablePlatforms.find((p) => p.id === platform);
   const charLimit = platform === "x" ? 280 : 2200;
+  const charPercentage = (charCount / charLimit) * 100;
+  const charColor = charPercentage > 90 ? 'text-rose-500' : charPercentage > 75 ? 'text-amber-400' : 'text-emerald-400';
 
   // AI Generator View
   if (showAIGenerator) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAIGenerator(false)} />
-        
-        <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAIGenerator(false)} />
+        <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
             <div className="flex items-center gap-3">
-              <Wand2 className="w-5 h-5 text-violet-400" />
-              <h2 className="text-lg font-semibold text-white">AI Content Generator</h2>
+              <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-xl flex items-center justify-center">
+                <Wand2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">AI Content Generator</h2>
+                <p className="text-sm text-slate-400">Trained on your voice</p>
+              </div>
             </div>
             <button onClick={() => setShowAIGenerator(false)} className="p-2 hover:bg-slate-800 rounded-lg">
               <X className="w-5 h-5 text-slate-400" />
@@ -228,38 +264,31 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
 
           <div className="p-6 space-y-6">
             {/* Tabs */}
-            <div className="flex gap-2 p-1 bg-slate-800/50 rounded-xl">
-              <button
-                onClick={() => setActiveTab('prompt')}
-                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'prompt' 
-                    ? 'bg-violet-600 text-white' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                From Prompt
-              </button>
-              <button
-                onClick={() => setActiveTab('url')}
-                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'url' 
-                    ? 'bg-violet-600 text-white' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                From URL
-              </button>
+            <div className="flex p-1 bg-slate-800 rounded-xl">
+              {['prompt', 'url'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab as any)}
+                  className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === tab 
+                      ? 'bg-violet-600 text-white shadow-lg' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tab === 'prompt' ? 'From Prompt' : 'From URL'}
+                </button>
+              ))}
             </div>
 
             {activeTab === 'prompt' ? (
               <>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="text-sm font-medium text-slate-300">What would you like to post about?</label>
                   <textarea
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
                     placeholder="e.g., Launching our new AI feature that helps creators write better content..."
-                    className="w-full min-h-[100px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full min-h-[120px] px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
                   />
                 </div>
 
@@ -269,7 +298,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     <select
                       value={aiTone}
                       onChange={(e) => setAiTone(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                     >
                       {tones.map(t => (
                         <option key={t.id} value={t.id}>{t.name}</option>
@@ -282,10 +311,10 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     <select
                       value={aiLength}
                       onChange={(e) => setAiLength(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                     >
                       {lengths.map(l => (
-                        <option key={l.id} value={l.id}>{l.name} ({l.chars})</option>
+                        <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
                     </select>
                   </div>
@@ -293,32 +322,29 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-300">Format</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setAiType('single')}
-                      className={`flex-1 py-3 px-4 rounded-xl border transition-colors ${
-                        aiType === 'single'
-                          ? 'bg-violet-600/20 border-violet-500 text-violet-300'
-                          : 'bg-slate-800/50 border-slate-700 text-slate-400'
-                      }`}
-                    >
-                      Single Post
-                    </button>
-                    <button
-                      onClick={() => setAiType('thread')}
-                      className={`flex-1 py-3 px-4 rounded-xl border transition-colors ${
-                        aiType === 'thread'
-                          ? 'bg-violet-600/20 border-violet-500 text-violet-300'
-                          : 'bg-slate-800/50 border-slate-700 text-slate-400'
-                      }`}
-                    >
-                      Thread
-                    </button>
+                  <div className="flex gap-3">
+                    {[
+                      { id: 'single', label: 'Single Post', icon: Send },
+                      { id: 'thread', label: 'Thread', icon: List }
+                    ].map((fmt) => (
+                      <button
+                        key={fmt.id}
+                        onClick={() => setAiType(fmt.id as any)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border transition-all ${
+                          aiType === fmt.id
+                            ? 'bg-violet-600/20 border-violet-500 text-violet-300'
+                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                      >
+                        <fmt.icon className="w-4 h-4" />
+                        {fmt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-300">Paste URL to summarize</label>
                 <div className="relative">
                   <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -327,7 +353,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     placeholder="https://example.com/article"
-                    className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full px-4 py-3 pl-11 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                   />
                 </div>
               </div>
@@ -336,7 +362,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
             <button
               onClick={handleGenerateAI}
               disabled={isGenerating || (activeTab === 'prompt' ? !aiPrompt.trim() : !urlInput.trim())}
-              className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
             >
               {isGenerating ? (
                 <>
@@ -353,18 +379,26 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
 
             {/* Generated Options */}
             {generatedOptions.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-3 pt-4 border-t border-slate-800">
                 <p className="text-sm font-medium text-slate-300">Choose an option:</p>
                 {generatedOptions.map((option, idx) => (
                   <button
                     key={idx}
                     onClick={() => selectGeneratedContent(option)}
-                    className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-violet-500 rounded-xl text-left text-slate-300 text-sm transition-colors"
+                    className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-violet-500 hover:bg-slate-800 rounded-xl text-left transition-all group"
                   >
-                    {aiType === 'thread' ? (
-                      <span className="text-violet-400 font-medium">{idx + 1}/</span>
-                    ) : null}
-                    {option}
+                    <div className="flex items-start gap-3">
+                      {aiType === 'thread' && (
+                        <span className="flex-shrink-0 w-6 h-6 bg-violet-600/20 text-violet-400 rounded-full flex items-center justify-center text-xs font-medium">
+                          {idx + 1}
+                        </span>
+                      )}
+                      <p className="text-slate-300 text-sm leading-relaxed">{option}</p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Check className="w-3 h-3" />
+                      Click to use this
+                    </div>
                   </button>
                 ))}
               </div>
@@ -378,164 +412,306 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   // Main Composer View
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+      <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Create Post</h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Status Message */}
-          {postStatus && (
-            <div className={`px-4 py-3 rounded-xl ${
-              postStatus.type === 'success' 
-                ? 'bg-emerald-500/10 border border-emerald-500/20' 
-                : 'bg-red-500/10 border border-red-500/20'
-            }`}>
-              <p className={`text-sm ${
-                postStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'
-              }`}>
-                {postStatus.message}
-              </p>
-            </div>
-          )}
-
-          {/* Connected Account Banner */}
-          {hasXConnected && platform === 'x' && (
-            <div className="flex items-center gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-              <div className="w-8 h-8 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                <Check className="w-4 h-4 text-emerald-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-emerald-400 font-medium">
-                  Posting as @{xAccounts[0]?.accountHandle}
-                </p>
-                <p className="text-xs text-emerald-400/70">Your X account is connected and ready</p>
-              </div>
-              {xAccounts[0]?.profileImageUrl && (
-                <img 
-                  src={xAccounts[0].profileImageUrl} 
-                  alt={xAccounts[0].accountHandle}
-                  className="w-8 h-8 rounded-full object-cover border border-emerald-500/30" 
-                />
-              )}
-            </div>
-          )}
-
-          {/* Platform Selector */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300">Platform</label>
-            <div className="grid grid-cols-4 gap-2">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-white">Create Post</h2>
+            
+            {/* Platform Selector */}
+            <div className="flex items-center gap-2">
               {availablePlatforms.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => p.connected && setPlatform(p.id)}
                   disabled={!p.connected}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all relative ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                     platform === p.id
-                      ? "bg-violet-600/20 border-violet-500 text-white"
+                      ? "bg-violet-600 text-white"
                       : p.connected
-                      ? "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"
-                      : "bg-slate-800/30 border-slate-800 text-slate-600 cursor-not-allowed"
+                      ? "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                      : "bg-slate-800/50 text-slate-600 cursor-not-allowed"
                   }`}
                 >
-                  <span className="text-lg">{p.icon}</span>
-                  <span className="text-sm font-medium">{p.name}</span>
-                  {!p.connected && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-slate-600 rounded-full"></span>
-                  )}
+                  <span>{p.icon}</span>
+                  <span className="hidden sm:inline">{p.name}</span>
                 </button>
               ))}
             </div>
-            {!hasXConnected && (
-              <p className="text-xs text-slate-500">
-                Connect your X account in {<a href="/settings" className="text-violet-400 hover:underline">Settings</a>} to enable posting
-              </p>
-            )}
           </div>
+          
+          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
 
-          {/* Content Area */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-300">Content</label>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAIGenerator(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left Side - Editor */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Status Message */}
+            {postStatus && (
+              <div className={`mx-6 mt-4 px-4 py-3 rounded-xl ${
+                postStatus.type === 'success' 
+                  ? 'bg-emerald-500/10 border border-emerald-500/20' 
+                  : 'bg-red-500/10 border border-red-500/20'
+              }`}>
+                <p className={`text-sm ${
+                  postStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'
+                }`}>
+                  {postStatus.message}
+                </p>
+              </div>
+            )}
+
+            {/* Connected Account */}
+            {hasXConnected && (
+              <div className="mx-6 mt-4 flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                {xAccounts[0]?.profileImageUrl ? (
+                  <img 
+                    src={xAccounts[0].profileImageUrl} 
+                    alt={xAccounts[0].accountHandle}
+                    className="w-8 h-8 rounded-full object-cover" 
+                  />
+                ) : (
+                  <div className="w-8 h-8 bg-emerald-600/20 rounded-full flex items-center justify-center">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  </div>
+                )}
+                <span className="text-sm text-emerald-400">Posting as @{xAccounts[0]?.accountHandle}</span>
+              </div>
+            )}
+
+            {/* Editor Toolbar */}
+            <div className="mx-6 mt-4 flex items-center gap-1 p-1 bg-slate-800 rounded-xl">
+              <button 
+                onClick={() => insertText('**bold**')}
+                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
+                title="Bold"
+              >
+                <Bold className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => insertText('*italic*')}
+                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
+                title="Italic"
+              >
+                <Italic className="w-4 h-4" />
+              </button>
+              <div className="w-px h-6 bg-slate-700 mx-1" />
+              <button 
+                onClick={() => insertText('@')}
+                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
+                title="Mention"
+              >
+                <AtSign className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => insertText('#')}
+                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
+                title="Hashtag"
+              >
+                <Hash className="w-4 h-4" />
+              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
+                  title="Emoji"
                 >
-                  <Wand2 className="w-3.5 h-3.5" />
-                  AI Generate
+                  <Smile className="w-4 h-4" />
+                </button>
+                
+                {showEmojiPicker && (
+                  <div className="absolute top-full left-0 mt-2 p-3 bg-slate-800 border border-slate-700 rounded-xl shadow-xl grid grid-cols-8 gap-1 z-10">
+                    {emojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => insertText(emoji)}
+                        className="w-8 h-8 hover:bg-slate-700 rounded-lg flex items-center justify-center text-lg"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1" />
+              <button
+                onClick={() => setShowAIGenerator(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                AI Generate
+              </button>
+            </div>
+
+            {/* Text Area */}
+            <div className="mx-6 mt-4 flex-1 min-h-[200px]">
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={handleContentChange}
+                onKeyUp={(e) => setCursorPosition(e.currentTarget.selectionStart)}
+                onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
+                placeholder="What's on your mind?"
+                disabled={!hasXConnected || isPosting}
+                className="w-full h-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 text-lg leading-relaxed"
+              />
+            </div>
+
+            {/* Media Preview */}
+            {mediaFiles.length > 0 && (
+              <div className="mx-6 mt-4 flex gap-2 overflow-x-auto pb-2">
+                {mediaFiles.map((media, idx) => (
+                  <div key={idx} className="relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden group">
+                    {media.type === 'image' ? (
+                      <img src={media.url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <video src={media.url} className="w-full h-full object-cover" />
+                    )}
+                    <button
+                      onClick={() => removeMedia(idx)}
+                      className="absolute top-1 right-1 w-6 h-6 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+                
+                <label className="flex-shrink-0 w-24 h-24 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-500 hover:bg-slate-800/50 transition-colors">
+                  <Plus className="w-6 h-6 text-slate-500" />
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    onChange={handleMediaUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Bottom Bar */}
+            <div className="mx-6 my-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg cursor-pointer transition-colors">
+                  <ImageIcon className="w-4 h-4 text-slate-400" />
+                  <span className="text-sm text-slate-400">Media</span>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    onChange={handleMediaUpload}
+                    className="hidden"
+                  />
+                </label>
+                
+                <button 
+                  onClick={() => setShowPreview(!showPreview)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                    showPreview ? 'bg-violet-600/20 text-violet-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                  }`}
+                >
+                  <Eye className="w-4 h-4" />
+                  <span className="text-sm">Preview</span>
                 </button>
               </div>
-            </div>
-            <textarea
-              value={content}
-              onChange={handleContentChange}
-              placeholder="What would you like to share?"
-              disabled={!hasXConnected || isPosting}
-              className="w-full min-h-[160px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Use @ to mention, # for hashtags</span>
-              <span className={`font-medium ${charCount > charLimit ? "text-rose-500" : "text-slate-400"}`}>
-                {charCount}/{charLimit}
-              </span>
-            </div>
-          </div>
 
-          {/* Media Upload */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300">Media</label>
-            <div className="flex items-center gap-3">
-              <button 
-                disabled={!hasXConnected}
-                className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ImageIcon className="w-4 h-4" />
-                <span className="text-sm">Add Image</span>
-              </button>
-              <button 
-                disabled={!hasXConnected}
-                className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span className="text-sm">🎬 Add Video</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Scheduling */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300">Schedule</label>
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="date"
-                  value={scheduledDate}
-                  onChange={(e) => setScheduledDate(e.target.value)}
-                  disabled={!hasXConnected || isPosting}
-                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50"
-                />
-              </div>
-              <div className="relative w-32">
-                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="time"
-                  value={scheduledTime}
-                  onChange={(e) => setScheduledTime(e.target.value)}
-                  disabled={!hasXConnected || isPosting}
-                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50"
-                />
+              {/* Character Counter */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all ${
+                        charPercentage > 90 ? 'bg-rose-500' : charPercentage > 75 ? 'bg-amber-400' : 'bg-emerald-400'
+                      }`}
+                      style={{ width: `${Math.min(charPercentage, 100)}%` }}
+                    />
+                  </div>
+                  <span className={`text-sm font-medium ${charColor}`}>
+                    {charCount}/{charLimit}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Right Side - Preview & Scheduling */}
+          {showPreview && (
+            <div className="w-80 border-l border-slate-800 bg-slate-900/30 p-6 overflow-y-auto">
+              <h3 className="text-sm font-medium text-slate-300 mb-4">Preview</h3>
+              
+              <div className="bg-black rounded-2xl p-4 border border-slate-800">
+                <div className="flex items-center gap-3 mb-3">
+                  {xAccounts[0]?.profileImageUrl ? (
+                    <img 
+                      src={xAccounts[0].profileImageUrl} 
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover" 
+                    />
+                  ) : (
+                    <div className="w-10 h-10 bg-slate-700 rounded-full" />
+                  )}
+                  <div>
+                    <p className="text-white font-medium text-sm">{xAccounts[0]?.accountName || 'Your Name'}</p>
+                    <p className="text-slate-500 text-xs">@{xAccounts[0]?.accountHandle || 'username'}</p>
+                  </div>
+                </div>
+                
+                <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">
+                  {content || 'Your post will appear here...'}
+                </p>
+                
+                {mediaFiles.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {mediaFiles.slice(0, 4).map((media, idx) => (
+                      <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-slate-800">
+                        {media.type === 'image' ? (
+                          <img src={media.url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={media.url} className="w-full h-full object-cover" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="mt-3 flex items-center gap-4 text-slate-500">
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-4">
+                <h3 className="text-sm font-medium text-slate-300">Schedule</h3>
+                
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="date"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      className="w-full px-4 py-2.5 pl-10 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                      className="w-full px-4 py-2.5 pl-10 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -545,27 +721,21 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
             disabled={!content.trim() || !hasXConnected || isPosting || charCount > charLimit}
             className="px-4 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
           >
-            {isPosting ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Posting...
-              </span>
-            ) : (
-              'Post Now'
-            )}
+            {isPosting ? 'Posting...' : 'Post Now'}
           </button>
+          
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
               disabled={isPosting}
-              className="px-4 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={() => handlePost(false)}
               disabled={!content.trim() || !hasXConnected || isPosting || charCount > charLimit}
-              className="px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl font-medium transition-all flex items-center gap-2 shadow-lg shadow-violet-600/20"
             >
               {isPosting ? (
                 <>
