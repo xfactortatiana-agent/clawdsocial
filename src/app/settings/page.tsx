@@ -1,19 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-export default function SettingsPage() {
+function SettingsContent() {
   const searchParams = useSearchParams();
   const [xConnected, setXConnected] = useState(false);
   const [xUsername, setXUsername] = useState("");
-  const [xProfileImage, setXProfileImage] = useState("");
   const [shinraConnected, setShinraConnected] = useState(false);
   const [shinraUrl, setShinraUrl] = useState("");
 
   useEffect(() => {
-    // Check URL params for X connection
     const connected = searchParams.get("connected");
     const username = searchParams.get("username");
     
@@ -34,7 +32,6 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
       <header className="bg-slate-900/50 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
@@ -55,11 +52,9 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-        {/* Connected Accounts */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
           <div className="px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
@@ -67,7 +62,6 @@ export default function SettingsPage() {
           </div>
 
           <div className="p-6">
-            {/* X Connection */}
             <div className="flex items-center justify-between py-4 border-b border-slate-800 last:border-0">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
@@ -96,7 +90,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ClawdCorp OS */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-800">
             <div className="flex items-center gap-2">
@@ -127,5 +120,15 @@ export default function SettingsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="text-slate-400">Loading...</div>
+    </div>}>
+      <SettingsContent />
+    </Suspense>
   );
 }
