@@ -52,7 +52,8 @@ export async function POST(request: Request) {
       if (pastPosts.length > 0) {
         // Analyze patterns
         const avgLength = pastPosts.reduce((sum, p) => sum + p.content.length, 0) / pastPosts.length
-        const usesEmojis = pastPosts.filter(p => /[\u{1F300}-\u{1F9FF}]/u.test(p.content)).length / pastPosts.length
+        const emojiRegex = new RegExp('[\u{1F300}-\u{1F9FF}]', 'u')
+        const usesEmojis = pastPosts.filter(p => emojiRegex.test(p.content)).length / pastPosts.length
         const usesHashtags = pastPosts.filter(p => p.content.includes('#')).length / pastPosts.length
         const questionRate = pastPosts.filter(p => p.content.includes('?')).length / pastPosts.length
         
