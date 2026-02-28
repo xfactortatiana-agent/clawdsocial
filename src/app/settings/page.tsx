@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser, useClerk } from "@clerk/nextjs";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
+  const { session } = useClerk();
   const [xConnected, setXConnected] = useState(false);
   const [xUsername, setXUsername] = useState("");
   const [xPfp, setXPfp] = useState("");
@@ -45,6 +46,21 @@ export default function SettingsPage() {
       });
     } catch (err) {
       console.error('Failed to save:', err);
+    }
+  };
+
+  const handleConnectX = async () => {
+    if (!session) return;
+    
+    try {
+      // Use Clerk's authenticateWithRedirect for X
+      await session.authenticateWithRedirect({
+        strategy: 'oauth_x',
+        redirectUrl: '/settings',
+        redirectUrlComplete: '/settings'
+      });
+    } catch (err) {
+      console.error('Failed to connect X:', err);
     }
   };
 
@@ -110,14 +126,12 @@ export default function SettingsPage() {
               {xConnected ? (
                 <span className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm">Connected ✓</span>
               ) : (
-                <a
-                  href="https://accounts.clerk.dev/user/account/connected-accounts"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={handleConnectX}
                   className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
                 >
                   Connect X
-                </a>
+                </button>
               )}
             </div>
           </div>
