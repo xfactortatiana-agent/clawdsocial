@@ -55,7 +55,6 @@ export async function POST(request: Request) {
       data: {
         workspaceId: workspace.id,
         content,
-        platform,
         status: scheduledFor ? 'SCHEDULED' : 'DRAFT',
         scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
         mediaUrls,
