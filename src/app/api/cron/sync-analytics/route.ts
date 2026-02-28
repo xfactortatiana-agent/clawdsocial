@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
-// This endpoint is called by a cron job to sync analytics from X
+// This endpoint syncs analytics from X - called by cron or manually
 export async function GET(request: Request) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
