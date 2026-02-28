@@ -103,9 +103,12 @@ Guidelines:
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      console.error('OpenAI error:', error)
-      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
+      const errorData = await response.json()
+      console.error('OpenAI API error:', JSON.stringify(errorData, null, 2))
+      return NextResponse.json({ 
+        error: 'AI generation failed', 
+        details: errorData.error?.message || response.statusText 
+      }, { status: 500 })
     }
 
     const data = await response.json()
