@@ -6,104 +6,43 @@ import { UserButton, useUser } from "@clerk/nextjs";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
-  const [xAccount, setXAccount] = useState<any>(null);
+  const [xAccounts, setXAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Check if user has X connected via Clerk
+  // Fetch connected X accounts from our database
   useEffect(() => {
     if (user) {
-      // Check for both 'x' and 'twitter' providers
-      const foundAccount = user.externalAccounts.find(
-        (account) => account.provider === 'x' || account.provider === 'twitter'
-      );
-      
-      setXAccount(foundAccount || null);
-      setIsLoading(false);
-      
-      if (foundAccount?.verification?.status === 'verified') {
-        saveXToDatabase(foundAccount);
-      }
+      fetchXAccounts();
     }
   }, [user]);
 
-  const saveXToDatabase = async (account: any) => {
-    if (!user) return;
-    
-    const identifier = account.username || 
-                      account.emailAddress ||
-                      account.providerUserId;
-    
-    if (!identifier) return;
-    
+  const fetchXAccounts = async () => {
     try {
-      await fetch('/api/auth/x/clerk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: identifier,
-          name: account.firstName || identifier,
-          pfp: account.imageUrl
-        })
-      });
+      const res = await fetch('/api/accounts');
+      if (res.ok) {
+        const data = await res.json();
+        setXAccounts(data.accounts || []);
+      }
     } catch (err) {
-      console.error('Failed to save:', err);
+      console.error('Failed to fetch accounts:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleConnectX = async () => {
-    if (!user) return;
-    
-    setError("");
-    
-    try {
-      // Try 'oauth_twitter' strategy instead of 'oauth_x'
-      // @ts-ignore
-      const res = await user.createExternalAccount({
-        strategy: 'oauth_twitter',
-        redirectUrl: window.location.origin + '/settings',
-      });
-      
-      if (res?.verification?.externalVerificationRedirectURL) {
-        window.location.href = res.verification.externalVerificationRedirectURL.href;
-      } else {
-        setError("Unable to connect X. Please try again later.");
-      }
-    } catch (err: any) {
-      console.error('Error:', err);
-      
-      // If oauth_twitter fails, try oauth_x as fallback
-      if (err.message?.includes('strategy')) {
-        try {
-          // @ts-ignore
-          const res2 = await user.createExternalAccount({
-            strategy: 'oauth_x',
-            redirectUrl: window.location.origin + '/settings',
-          });
-          
-          if (res2?.verification?.externalVerificationRedirectURL) {
-            window.location.href = res2.verification.externalVerificationRedirectURL.href;
-            return;
-          }
-        } catch (err2: any) {
-          console.error('Fallback error:', err2);
-        }
-      }
-      
-      setError("Unable to connect X. Please try again later.");
-    }
+  const handleConnectX = () => {
+    // Use our custom OAuth flow
+    window.location.href = '/api/auth/x';
   };
 
-  const handleDisconnectX = async () => {
-    if (!xAccount) return;
-    
+  const handleDisconnectX = async (accountId: string) => {
     try {
-      await xAccount.destroy();
-      await user?.reload();
-      setXAccount(null);
+      await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
+      setXAccounts(xAccounts.filter(a => a.id !== accountId));
     } catch (err) {
       console.error('Failed to disconnect:', err);
-      setError("Failed to disconnect. Please refresh and try again.");
+      setError("Failed to disconnect. Please try again.");
     }
   };
 
@@ -114,12 +53,6 @@ export default function SettingsPage() {
       </div>
     );
   }
-
-  const isVerified = xAccount?.verification?.status === 'verified';
-  const displayName = xAccount?.username || 
-                     xAccount?.emailAddress ||
-                     xAccount?.providerUserId ||
-                     'Connected';
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -159,47 +92,66 @@ export default function SettingsPage() {
           </div>
 
           <div className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                {xAccount?.imageUrl ? (
-                  <img 
-                    src={xAccount.imageUrl} 
-                    alt={displayName} 
-                    className="w-12 h-12 rounded-xl object-cover" 
-                  />
-                ) : (
+            {xAccounts.length === 0 ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
                     <span className="text-2xl">𝕏</span>
                   </div>
-                )}
-                <div>
-                  <p className="font-medium text-white">X (Twitter)</p>
-                  {xAccount ? (
-                    <p className="text-sm text-emerald-400">
-                      {isVerified ? '✓ Connected' : '⏳ Pending'} — {displayName}
-                    </p>
-                  ) : (
+                  <div>
+                    <p className="font-medium text-white">X (Twitter)</p>
                     <p className="text-sm text-slate-500">Not connected</p>
-                  )}
+                  </div>
                 </div>
-              </div>
-              
-              {xAccount ? (
-                <button
-                  onClick={handleDisconnectX}
-                  className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-600/30"
-                >
-                  Disconnect
-                </button>
-              ) : (
+                
                 <button
                   onClick={handleConnectX}
                   className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
                 >
                   Connect X
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {xAccounts.map((account) => (
+                  <div key={account.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {account.profileImageUrl ? (
+                        <img 
+                          src={account.profileImageUrl} 
+                          alt={account.accountHandle}
+                          className="w-12 h-12 rounded-xl object-cover" 
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
+                          <span className="text-2xl">𝕏</span>
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium text-white">X (Twitter)</p>
+                        <p className="text-sm text-emerald-400">
+                          ✓ Connected — @{account.accountHandle}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => handleDisconnectX(account.id)}
+                      className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-600/30"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                ))}
+                
+                <button
+                  onClick={handleConnectX}
+                  className="w-full mt-4 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-700"
+                >
+                  + Connect Another X Account
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
