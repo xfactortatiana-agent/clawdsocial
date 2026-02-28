@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { X, Sparkles, Image as ImageIcon, Calendar, Clock, Check } from "lucide-react";
+import { X, Sparkles, Image as ImageIcon, Calendar, Clock, Check, Loader2 } from "lucide-react";
 
 interface ComposerModalProps {
   isOpen: boolean;
@@ -26,7 +26,9 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   );
   const [scheduledTime, setScheduledTime] = useState("10:00");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
   const [charCount, setCharCount] = useState(0);
+  const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Get X accounts from connected accounts
   const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
@@ -46,6 +48,15 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
     }
   }, [hasXConnected, platform]);
 
+  // Clear status when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPostStatus(null);
+      setContent("");
+      setCharCount(0);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -63,9 +74,55 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
     setIsGenerating(false);
   };
 
-  const handleSave = () => {
-    console.log("Saving post:", { content, platform, scheduledDate, scheduledTime });
-    onClose();
+  const handlePost = async (publishNow: boolean = false) => {
+    if (!content.trim() || !hasXConnected) return;
+    
+    setIsPosting(true);
+    setPostStatus(null);
+
+    try {
+      const scheduledFor = publishNow 
+        ? null 
+        : new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: content.trim(),
+          platform: 'X',
+          scheduledFor
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setPostStatus({
+          type: 'success',
+          message: publishNow 
+            ? 'Post published successfully!' 
+            : 'Post scheduled successfully!'
+        });
+        setContent("");
+        setCharCount(0);
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      } else {
+        setPostStatus({
+          type: 'error',
+          message: data.error || data.details || 'Failed to post. Please try again.'
+        });
+      }
+    } catch (err) {
+      setPostStatus({
+        type: 'error',
+        message: 'Network error. Please try again.'
+      });
+    } finally {
+      setIsPosting(false);
+    }
   };
 
   const selectedPlatform = availablePlatforms.find((p) => p.id === platform);
@@ -87,6 +144,21 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Status Message */}
+          {postStatus && (
+            <div className={`px-4 py-3 rounded-xl ${
+              postStatus.type === 'success' 
+                ? 'bg-emerald-500/10 border border-emerald-500/20' 
+                : 'bg-red-500/10 border border-red-500/20'
+            }`}>
+              <p className={`text-sm ${
+                postStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {postStatus.message}
+              </p>
+            </div>
+          )}
+
           {/* Connected Account Banner */}
           {hasXConnected && platform === 'x' && (
             <div className="flex items-center gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
@@ -147,7 +219,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
               <label className="text-sm font-medium text-slate-300">Content</label>
               <button
                 onClick={handleGenerateAI}
-                disabled={isGenerating}
+                disabled={isGenerating || !hasXConnected}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600/20 text-violet-400 rounded-lg text-sm hover:bg-violet-600/30 transition-colors disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -158,7 +230,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
               value={content}
               onChange={handleContentChange}
               placeholder="What would you like to share?"
-              disabled={!hasXConnected}
+              disabled={!hasXConnected || isPosting}
               className="w-full min-h-[160px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="flex items-center justify-between text-sm">
@@ -199,7 +271,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  disabled={!hasXConnected}
+                  disabled={!hasXConnected || isPosting}
                   className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50"
                 />
               </div>
@@ -209,7 +281,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                   type="time"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
-                  disabled={!hasXConnected}
+                  disabled={!hasXConnected || isPosting}
                   className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50"
                 />
               </div>
@@ -220,25 +292,40 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/50">
           <button
-            onClick={onClose}
-            disabled={!hasXConnected}
+            onClick={() => handlePost(true)}
+            disabled={!content.trim() || !hasXConnected || isPosting || charCount > charLimit}
             className="px-4 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
           >
-            Save as Draft
+            {isPosting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Posting...
+              </span>
+            ) : (
+              'Post Now'
+            )}
           </button>
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+              disabled={isPosting}
+              className="px-4 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
-              onClick={handleSave}
-              disabled={!content.trim() || !hasXConnected}
-              className="px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
+              onClick={() => handlePost(false)}
+              disabled={!content.trim() || !hasXConnected || isPosting || charCount > charLimit}
+              className="px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
-              {hasXConnected ? 'Schedule Post' : 'Connect X to Post'}
+              {isPosting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Scheduling...
+                </>
+              ) : (
+                'Schedule Post'
+              )}
             </button>
           </div>
         </div>
