@@ -105,7 +105,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="py-12 px-4 border-t">
         <div className="max-w-6xl mx-auto text-center text-slate-500">
-          <p>© 2025 ClawdSocial. Built by ClawdCorp.</p>
+          <p>© 2026 ClawdSocial. Built by ClawdCorp.</p>
         </div>
       </footer>
     </div>
