@@ -91,8 +91,8 @@ export async function GET(request: Request) {
               data: {
                 workspaceId: account.workspaceId,
                 accountId: account.id,
+                createdById: account.userId || '',
                 content: tweet.text,
-                platform: 'X',
                 status: 'PUBLISHED',
                 publishedAt: new Date(tweet.created_at),
                 platformPostId: tweet.id,
@@ -102,8 +102,7 @@ export async function GET(request: Request) {
                 impressions: tweet.public_metrics?.impression_count,
                 engagements: (tweet.public_metrics?.like_count || 0) + 
                             (tweet.public_metrics?.reply_count || 0) + 
-                            (tweet.public_metrics?.retweet_count || 0),
-                createdById: account.userId || ''
+                            (tweet.public_metrics?.retweet_count || 0)
               }
             })
           }
