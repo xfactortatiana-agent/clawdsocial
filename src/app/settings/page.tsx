@@ -13,6 +13,7 @@ export default function SettingsPage() {
   // Check if user has X connected via Clerk
   useEffect(() => {
     if (user) {
+      // Check for both 'x' and 'twitter' providers
       const foundAccount = user.externalAccounts.find(
         (account) => account.provider === 'x' || account.provider === 'twitter'
       );
@@ -56,10 +57,11 @@ export default function SettingsPage() {
     setError("");
     
     try {
+      // Try 'oauth_twitter' strategy instead of 'oauth_x'
       // @ts-ignore
       const res = await user.createExternalAccount({
-        strategy: 'oauth_x',
-        redirectUrl: window.location.href,
+        strategy: 'oauth_twitter',
+        redirectUrl: window.location.origin + '/settings',
       });
       
       if (res?.verification?.externalVerificationRedirectURL) {
@@ -69,6 +71,25 @@ export default function SettingsPage() {
       }
     } catch (err: any) {
       console.error('Error:', err);
+      
+      // If oauth_twitter fails, try oauth_x as fallback
+      if (err.message?.includes('strategy')) {
+        try {
+          // @ts-ignore
+          const res2 = await user.createExternalAccount({
+            strategy: 'oauth_x',
+            redirectUrl: window.location.origin + '/settings',
+          });
+          
+          if (res2?.verification?.externalVerificationRedirectURL) {
+            window.location.href = res2.verification.externalVerificationRedirectURL.href;
+            return;
+          }
+        } catch (err2: any) {
+          console.error('Fallback error:', err2);
+        }
+      }
+      
       setError("Unable to connect X. Please try again later.");
     }
   };
