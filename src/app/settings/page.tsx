@@ -8,11 +8,25 @@ export default function SettingsPage() {
   const { user, isLoaded } = useUser();
   const [xAccount, setXAccount] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [debugInfo, setDebugInfo] = useState("");
 
   // Check if user has X connected via Clerk
   useEffect(() => {
     if (user) {
-      // Find X/Twitter account - provider could be 'x' or 'twitter'
+      console.log('All external accounts:', user.externalAccounts);
+      
+      // Debug: show all accounts
+      const debug = user.externalAccounts.map((a: any) => ({
+        provider: a.provider,
+        providerUserId: a.providerUserId,
+        username: a.username,
+        emailAddress: a.emailAddress,
+        verification: a.verification?.status,
+        id: a.id
+      }));
+      setDebugInfo(JSON.stringify(debug, null, 2));
+      
+      // Find X/Twitter account
       const foundAccount = user.externalAccounts.find(
         (account) => account.provider === 'x' || account.provider === 'twitter'
       );
@@ -20,7 +34,6 @@ export default function SettingsPage() {
       setXAccount(foundAccount || null);
       setIsLoading(false);
       
-      // Save to our database if found and verified
       if (foundAccount?.verification?.status === 'verified') {
         saveXToDatabase(foundAccount);
       }
@@ -30,9 +43,7 @@ export default function SettingsPage() {
   const saveXToDatabase = async (account: any) => {
     if (!user) return;
     
-    // Get identifier using accountIdentifier() method or fallback to other fields
-    const identifier = account.accountIdentifier?.() || 
-                      account.username || 
+    const identifier = account.username || 
                       account.emailAddress ||
                       account.providerUserId;
     
@@ -44,7 +55,7 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: identifier,
-          name: account.name || account.firstName || identifier,
+          name: account.firstName || identifier,
           pfp: account.imageUrl
         })
       });
@@ -56,18 +67,23 @@ export default function SettingsPage() {
   const handleConnectX = () => {
     if (!user) return;
     
-    // Use 'oauth_x' strategy - Clerk will normalize to provider 'x'
     // @ts-ignore
     user.createExternalAccount({
       strategy: 'oauth_x',
       redirectUrl: window.location.href,
     }).then((res: any) => {
+      console.log('createExternalAccount result:', res);
       if (res?.verification?.externalVerificationRedirectURL) {
         window.location.href = res.verification.externalVerificationRedirectURL;
       }
     }).catch((err: any) => {
       console.error('Error:', err);
-      alert('Error: ' + err.message);
+      // Check if error is because already connected
+      if (err.message?.includes('already')) {
+        alert('X is already connected to this account');
+      } else {
+        alert('Error: ' + err.message);
+      }
     });
   };
 
@@ -80,7 +96,7 @@ export default function SettingsPage() {
       setXAccount(null);
     } catch (err) {
       console.error('Failed to disconnect:', err);
-      alert('Failed to disconnect. Try again.');
+      alert('Failed to disconnect. Try refreshing the page.');
     }
   };
 
@@ -93,9 +109,9 @@ export default function SettingsPage() {
   }
 
   const isVerified = xAccount?.verification?.status === 'verified';
-  const displayName = xAccount?.accountIdentifier?.() || 
-                     xAccount?.username || 
+  const displayName = xAccount?.username || 
                      xAccount?.emailAddress ||
+                     xAccount?.providerUserId ||
                      'Connected';
 
   return (
@@ -123,7 +139,7 @@ export default function SettingsPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
           <div className="px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
             <p className="text-sm text-slate-400">Link your social media accounts</p>
@@ -147,7 +163,7 @@ export default function SettingsPage() {
                   <p className="font-medium text-white">X (Twitter)</p>
                   {xAccount ? (
                     <p className="text-sm text-emerald-400">
-                      {isVerified ? 'Connected' : 'Pending'} as {displayName}
+                      {isVerified ? '✓ Verified' : '⏳ Pending'} — {displayName}
                     </p>
                   ) : (
                     <p className="text-sm text-slate-500">Not connected</p>
@@ -172,6 +188,12 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Debug */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <p className="text-sm text-slate-400 mb-2">Debug (External Accounts):</p>
+          <pre className="text-xs text-slate-500 overflow-auto max-h-40">{debugInfo || 'None'}</pre>
         </div>
       </main>
     </div>
