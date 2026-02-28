@@ -3,15 +3,16 @@
 import { VisualCalendar } from "@/components/calendar/VisualCalendar";
 import { ComposerModal } from "@/components/composer/ComposerModal";
 import { useState } from "react";
+import Link from "next/link";
+import { Calendar, Plus, Settings, BarChart3, FileText } from "lucide-react";
 
-// Mock data for demo
 const mockPosts = [
   {
     id: "1",
     content: "Launching something new today! 🚀",
     platform: "x" as const,
     status: "scheduled" as const,
-    scheduledFor: new Date(2025, 1, 15, 10, 0),
+    scheduledFor: new Date(2026, 1, 28, 10, 0),
     accountName: "@clawdcorp",
   },
   {
@@ -19,7 +20,7 @@ const mockPosts = [
     content: "Behind the scenes of our AI workflow",
     platform: "instagram" as const,
     status: "draft" as const,
-    scheduledFor: new Date(2025, 1, 15, 14, 0),
+    scheduledFor: new Date(2026, 1, 28, 14, 0),
     accountName: "@clawdcorp",
   },
   {
@@ -27,15 +28,7 @@ const mockPosts = [
     content: "How we ship 10x faster with agents",
     platform: "linkedin" as const,
     status: "published" as const,
-    scheduledFor: new Date(2025, 1, 10, 9, 0),
-    accountName: "@clawdcorp",
-  },
-  {
-    id: "4",
-    content: "TikTok trend analysis thread",
-    platform: "tiktok" as const,
-    status: "scheduled" as const,
-    scheduledFor: new Date(2025, 1, 20, 16, 0),
+    scheduledFor: new Date(2026, 1, 25, 9, 0),
     accountName: "@clawdcorp",
   },
 ];
@@ -55,52 +48,69 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+    <div className="min-h-screen bg-slate-950">
+      {/* Sidebar */}
+      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900/50 border-r border-slate-800/50 z-40">
+        <div className="p-6">
+          <Link href="/" className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-cyan-600 rounded-xl flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-xl text-slate-900">ClawdSocial</span>
-          </div>
+            <span className="font-bold text-xl text-white">ClawdSocial</span>
+          </Link>
 
-          <nav className="flex items-center gap-6">
-            <a href="#" className="text-sm font-medium text-slate-900">Calendar</a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-slate-900">Posts</a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-slate-900">Analytics</a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-slate-900">Settings</a>
+          <nav className="space-y-1">
+            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-violet-600/20 text-violet-300 rounded-xl">
+              <Calendar className="w-5 h-5" />
+              <span className="font-medium">Calendar</span>
+            </Link>
+            <Link href="#" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800/50 rounded-xl transition-colors">
+              <FileText className="w-5 h-5" />
+              <span>Posts</span>
+            </Link>
+            <Link href="#" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800/50 rounded-xl transition-colors">
+              <BarChart3 className="w-5 h-5" />
+              <span>Analytics</span>
+            </Link>
+            <Link href="/settings" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800/50 rounded-xl transition-colors">
+              <Settings className="w-5 h-5" />
+              <span>Settings</span>
+            </Link>
           </nav>
-
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={handleNewPost}
-              className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800"
-            >
-              New Post
-            </button>
-            <div className="w-8 h-8 bg-gradient-to-br from-slate-400 to-slate-600 rounded-full"></div>
-          </div>
         </div>
-      </header>
+      </aside>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Content Calendar</h1>
-          <p className="text-slate-600">Schedule and manage your social media posts</p>
-        </div>
+      <main className="ml-64">
+        {/* Header */}
+        <header className="h-16 border-b border-slate-800/50 flex items-center justify-between px-8">
+          <div>
+            <h1 className="text-xl font-semibold text-white">Content Calendar</h1>
+            <p className="text-sm text-slate-400">Schedule and manage your posts</p>
+          </div>
 
-        <VisualCalendar
-          posts={mockPosts}
-          onDateClick={handleDateClick}
-          onPostClick={(post) => {
-            console.log("Clicked post:", post);
-          }}
-        />
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleNewPost}
+              className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Post
+            </button>
+            <div className="w-10 h-10 bg-gradient-to-br from-slate-600 to-slate-700 rounded-full"></div>
+          </div>
+        </header>
+
+        {/* Calendar */}
+        <div className="p-8">
+          <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6">
+            <VisualCalendar
+              posts={mockPosts}
+              onDateClick={handleDateClick}
+              onPostClick={(post) => console.log(post)}
+            />
+          </div>
+        </div>
       </main>
 
       {/* Composer Modal */}
