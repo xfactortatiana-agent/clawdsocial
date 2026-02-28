@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const REDIRECT_URI = 'https://clawdsocial.vercel.app/api/auth/x/callback'
 
 export async function GET() {
+  const { userId } = auth()
+  
+  if (!userId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   if (!X_CLIENT_ID) {
     return NextResponse.json({ error: 'X_CLIENT_ID not configured' }, { status: 500 })
   }
@@ -19,8 +26,14 @@ export async function GET() {
   authUrl.searchParams.set('code_challenge', 'challenge')
   authUrl.searchParams.set('code_challenge_method', 'plain')
 
-  // Store state in cookie
+  // Store clerk user ID in cookie for callback
   const response = NextResponse.redirect(authUrl.toString())
+  response.cookies.set('clerk_user_id', userId, { 
+    httpOnly: true, 
+    secure: true,
+    maxAge: 600,
+    path: '/'
+  })
   response.cookies.set('x_oauth_state', state, { 
     httpOnly: true, 
     secure: true,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
 
@@ -27,6 +28,15 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Get clerkId from cookie (set during auth)
+    const cookieStore = cookies()
+    const clerkId = cookieStore.get('clerk_user_id')?.value
+
+    if (!clerkId) {
+      console.error('No clerkId in cookie')
+      return NextResponse.redirect(new URL('/settings?error=not_authenticated', request.url))
+    }
+
     // Exchange code for access token
     console.log('Exchanging code for token...')
     
@@ -80,11 +90,64 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
-    // Redirect back with success - data will be saved by client
-    console.log('Success! Redirecting with user data...')
+    // Save to database immediately
+    console.log('Saving to database for clerkId:', clerkId)
+    
+    const dbUser = await prisma.user.upsert({
+      where: { clerkId },
+      update: {
+        name: xUser.name || xUser.username,
+        imageUrl: xUser.profile_image_url
+      },
+      create: {
+        clerkId,
+        email: `${clerkId}@clawdsocial.local`,
+        name: xUser.name || xUser.username,
+        imageUrl: xUser.profile_image_url
+      }
+    })
+
+    const workspace = await prisma.workspace.upsert({
+      where: { slug: `user-${clerkId.slice(-8)}` },
+      update: {},
+      create: {
+        name: `${xUser.name || xUser.username}'s Workspace`,
+        slug: `user-${clerkId.slice(-8)}`,
+        ownerId: dbUser.id
+      }
+    })
+
+    await prisma.socialAccount.upsert({
+      where: {
+        workspaceId_platform_accountHandle: {
+          workspaceId: workspace.id,
+          platform: 'X',
+          accountHandle: xUser.username
+        }
+      },
+      update: {
+        accountName: xUser.name || xUser.username,
+        profileImageUrl: xUser.profile_image_url,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        isActive: true
+      },
+      create: {
+        workspaceId: workspace.id,
+        platform: 'X',
+        accountHandle: xUser.username,
+        accountName: xUser.name || xUser.username,
+        profileImageUrl: xUser.profile_image_url,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        isActive: true
+      }
+    })
+
+    console.log('Saved successfully!')
 
     return NextResponse.redirect(
-      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}&name=${encodeURIComponent(xUser.name || '')}&pfp=${encodeURIComponent(xUser.profile_image_url || '')}`, request.url)
+      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}`, request.url)
     )
   } catch (err) {
     console.error('OAuth exception:', err)
