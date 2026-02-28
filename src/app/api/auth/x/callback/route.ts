@@ -48,9 +48,7 @@ export async function GET(request: Request) {
       )
     }
 
-    console.log('Got access token:', tokenData.access_token ? 'yes' : 'no')
-
-    // Get user info from X - request more fields
+    // Get user info from X
     const userResponse = await fetch('https://api.twitter.com/2/users/me?user.fields=profile_image_url,username,name', {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`
@@ -58,20 +56,27 @@ export async function GET(request: Request) {
     })
 
     if (!userResponse.ok) {
-      const userError = await userResponse.text()
-      console.error('User info error:', userResponse.status, userError)
       return NextResponse.redirect(new URL('/settings?error=user_info_failed', request.url))
     }
 
     const userData = await userResponse.json()
-    console.log('User data from X:', JSON.stringify(userData))
-
     const xUser = userData.data
 
     if (!xUser || !xUser.username) {
-      console.error('No username in response:', userData)
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
+
+    // Create default workspace if it doesn't exist
+    await prisma.workspace.upsert({
+      where: { id: 'default-workspace' },
+      update: {},
+      create: {
+        id: 'default-workspace',
+        name: 'Default Workspace',
+        slug: 'default',
+        ownerId: 'temp-user-id'
+      }
+    })
 
     // Save to database
     await prisma.socialAccount.upsert({
@@ -101,8 +106,6 @@ export async function GET(request: Request) {
         isActive: true
       }
     })
-
-    console.log('Saved user:', xUser.username)
 
     return NextResponse.redirect(
       new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}`, request.url)
