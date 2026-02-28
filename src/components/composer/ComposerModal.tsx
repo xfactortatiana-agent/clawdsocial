@@ -3,22 +3,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { X, Sparkles, Image as ImageIcon, Calendar, Clock } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface ComposerModalProps {
   isOpen: boolean;
@@ -27,10 +11,10 @@ interface ComposerModalProps {
 }
 
 const platforms = [
-  { id: "x", name: "X (Twitter)", icon: "𝕏", color: "bg-slate-900" },
-  { id: "instagram", name: "Instagram", icon: "📷", color: "bg-gradient-to-br from-purple-600 to-pink-500" },
-  { id: "linkedin", name: "LinkedIn", icon: "💼", color: "bg-blue-600" },
-  { id: "tiktok", name: "TikTok", icon: "🎵", color: "bg-black" },
+  { id: "x", name: "X (Twitter)", icon: "𝕏" },
+  { id: "instagram", name: "Instagram", icon: "📷" },
+  { id: "linkedin", name: "LinkedIn", icon: "💼" },
+  { id: "tiktok", name: "TikTok", icon: "🎵" },
 ];
 
 export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalProps) {
@@ -43,6 +27,8 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
   const [isGenerating, setIsGenerating] = useState(false);
   const [charCount, setCharCount] = useState(0);
 
+  if (!isOpen) return null;
+
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
     setContent(text);
@@ -51,20 +37,15 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
 
   const handleGenerateAI = async () => {
     setIsGenerating(true);
-    // Simulate AI generation
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    setContent("🚀 Excited to share what we've been building! \n\nAI-powered social media management that actually understands your brand voice. \n\nNo more generic posts. No more scheduling headaches. \n\nJust great content, delivered at the perfect time. \n\nWhat would you automate first? 👇");
-    setCharCount(content.length);
+    const generated = "🚀 Excited to share what we've been building! AI-powered social media management that understands your brand voice.";
+    setContent(generated);
+    setCharCount(generated.length);
     setIsGenerating(false);
   };
 
   const handleSave = () => {
-    const scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`);
-    console.log("Saving post:", {
-      content,
-      platform,
-      scheduledFor,
-    });
+    console.log("Saving post:", { content, platform, scheduledDate, scheduledTime });
     onClose();
   };
 
@@ -72,71 +53,64 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
   const charLimit = platform === "x" ? 280 : 2200;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden">
-        <DialogHeader className="px-6 py-4 border-b border-slate-200">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold">Create Post</DialogTitle>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        </DialogHeader>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Create Post</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
 
         <div className="p-6 space-y-6">
           {/* Platform Selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Platform</label>
-            <Select value={platform} onValueChange={setPlatform}>
-              <SelectTrigger className="w-full">
-                <SelectValue>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{selectedPlatform?.icon}</span>
-                    <span>{selectedPlatform?.name}</span>
-                  </div>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {platforms.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{p.icon}</span>
-                      <span>{p.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <label className="text-sm font-medium text-slate-300">Platform</label>
+            <div className="grid grid-cols-4 gap-2">
+              {platforms.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPlatform(p.id)}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all ${
+                    platform === p.id
+                      ? "bg-violet-600/20 border-violet-500 text-white"
+                      : "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"
+                  }`}
+                >
+                  <span className="text-lg">{p.icon}</span>
+                  <span className="text-sm font-medium">{p.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Content Area */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700">Content</label>
-              <Button
-                variant="outline"
-                size="sm"
+              <label className="text-sm font-medium text-slate-300">Content</label>
+              <button
                 onClick={handleGenerateAI}
                 disabled={isGenerating}
-                className="gap-1.5"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600/20 text-violet-400 rounded-lg text-sm hover:bg-violet-600/30 transition-colors disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {isGenerating ? "Generating..." : "Generate with AI"}
-              </Button>
+              </button>
             </div>
-            <Textarea
+            <textarea
               value={content}
               onChange={handleContentChange}
               placeholder="What would you like to share?"
-              className="min-h-[160px] resize-none"
+              className="w-full min-h-[160px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
             />
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Use @ to mention, # for hashtags</span>
-              <span
-                className={`font-medium ${
-                  charCount > charLimit ? "text-red-500" : "text-slate-500"
-                }`}
-              >
+              <span className={`font-medium ${charCount > charLimit ? "text-rose-500" : "text-slate-400"}`}>
                 {charCount}/{charLimit}
               </span>
             </div>
@@ -144,38 +118,38 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
 
           {/* Media Upload */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Media</label>
+            <label className="text-sm font-medium text-slate-300">Media</label>
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 px-4 py-2 border border-dashed border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
-                <ImageIcon className="w-4 h-4 text-slate-500" />
-                <span className="text-sm text-slate-600">Add Image</span>
+              <button className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors">
+                <ImageIcon className="w-4 h-4" />
+                <span className="text-sm">Add Image</span>
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 border border-dashed border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
-                <span className="text-sm text-slate-600">🎬 Add Video</span>
+              <button className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors">
+                <span className="text-sm">🎬 Add Video</span>
               </button>
             </div>
           </div>
 
           {/* Scheduling */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Schedule</label>
+            <label className="text-sm font-medium text-slate-300">Schedule</label>
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <Input
+                <input
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  className="pl-10"
+                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
                 />
               </div>
               <div className="relative w-32">
                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <Input
+                <input
                   type="time"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
-                  className="pl-10"
+                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
                 />
               </div>
             </div>
@@ -183,24 +157,30 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50">
-          <Button variant="outline" onClick={onClose}>
+        <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+          >
             Save as Draft
-          </Button>
+          </button>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={onClose}>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+            >
               Cancel
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={handleSave}
               disabled={!content.trim()}
-              className="gap-2"
+              className="px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
             >
-              <span>Schedule Post</span>
-            </Button>
+              Schedule Post
+            </button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
