@@ -2,7 +2,7 @@
 
 import { VisualCalendar } from "@/components/calendar/VisualCalendar";
 import { ComposerModal } from "@/components/composer/ComposerModal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Calendar, Plus, Settings, BarChart3, FileText } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
@@ -37,6 +37,17 @@ const mockPosts = [
 export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
+
+  // Fetch connected accounts
+  useEffect(() => {
+    fetch('/api/accounts')
+      .then(res => res.json())
+      .then(data => {
+        setConnectedAccounts(data.accounts || []);
+      })
+      .catch(err => console.error('Failed to fetch accounts:', err));
+  }, []);
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -47,6 +58,8 @@ export default function DashboardPage() {
     setSelectedDate(new Date());
     setIsComposerOpen(true);
   };
+
+  const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -78,6 +91,38 @@ export default function DashboardPage() {
               <span>Settings</span>
             </Link>
           </nav>
+
+          {/* Connected Accounts */}
+          <div className="mt-8 pt-6 border-t border-slate-800">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Connected</p>
+            
+            {xAccounts.length > 0 ? (
+              <div className="space-y-2">
+                {xAccounts.map((account) => (
+                  <div key={account.id} className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                    {account.profileImageUrl ? (
+                      <img 
+                        src={account.profileImageUrl} 
+                        alt={account.accountHandle}
+                        className="w-6 h-6 rounded-full object-cover" 
+                      />
+                    ) : (
+                      <span className="text-sm">𝕏</span>
+                    )}
+                    <span className="text-sm text-emerald-400 truncate">@{account.accountHandle}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Link 
+                href="/settings" 
+                className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <span>𝕏</span>
+                <span>Connect X</span>
+              </Link>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -91,6 +136,13 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
+            {xAccounts.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-emerald-400">Ready to post</span>
+              </div>
+            )}
+            
             <button 
               onClick={handleNewPost}
               className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
@@ -126,6 +178,7 @@ export default function DashboardPage() {
         isOpen={isComposerOpen}
         onClose={() => setIsComposerOpen(false)}
         initialDate={selectedDate}
+        connectedAccounts={connectedAccounts}
       />
     </div>
   );

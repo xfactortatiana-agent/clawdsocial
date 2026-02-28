@@ -1,23 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { X, Sparkles, Image as ImageIcon, Calendar, Clock } from "lucide-react";
+import { X, Sparkles, Image as ImageIcon, Calendar, Clock, Check } from "lucide-react";
 
 interface ComposerModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate?: Date | null;
+  connectedAccounts?: any[];
 }
 
-const platforms = [
+const allPlatforms = [
   { id: "x", name: "X (Twitter)", icon: "𝕏" },
   { id: "instagram", name: "Instagram", icon: "📷" },
   { id: "linkedin", name: "LinkedIn", icon: "💼" },
   { id: "tiktok", name: "TikTok", icon: "🎵" },
 ];
 
-export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalProps) {
+export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [] }: ComposerModalProps) {
   const [content, setContent] = useState("");
   const [platform, setPlatform] = useState("x");
   const [scheduledDate, setScheduledDate] = useState(
@@ -26,6 +27,24 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
   const [scheduledTime, setScheduledTime] = useState("10:00");
   const [isGenerating, setIsGenerating] = useState(false);
   const [charCount, setCharCount] = useState(0);
+
+  // Get X accounts from connected accounts
+  const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
+  const hasXConnected = xAccounts.length > 0;
+
+  // Filter platforms based on connected accounts
+  const availablePlatforms = allPlatforms.map(p => ({
+    ...p,
+    connected: p.id === 'x' ? hasXConnected : false,
+    accounts: p.id === 'x' ? xAccounts : []
+  }));
+
+  // Set default platform to X if connected
+  useEffect(() => {
+    if (hasXConnected && platform !== 'x') {
+      setPlatform('x');
+    }
+  }, [hasXConnected, platform]);
 
   if (!isOpen) return null;
 
@@ -49,7 +68,7 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
     onClose();
   };
 
-  const selectedPlatform = platforms.find((p) => p.id === platform);
+  const selectedPlatform = availablePlatforms.find((p) => p.id === platform);
   const charLimit = platform === "x" ? 280 : 2200;
 
   return (
@@ -68,25 +87,58 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Connected Account Banner */}
+          {hasXConnected && platform === 'x' && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <div className="w-8 h-8 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                <Check className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-emerald-400 font-medium">
+                  Posting as @{xAccounts[0]?.accountHandle}
+                </p>
+                <p className="text-xs text-emerald-400/70">Your X account is connected and ready</p>
+              </div>
+              {xAccounts[0]?.profileImageUrl && (
+                <img 
+                  src={xAccounts[0].profileImageUrl} 
+                  alt={xAccounts[0].accountHandle}
+                  className="w-8 h-8 rounded-full object-cover border border-emerald-500/30" 
+                />
+              )}
+            </div>
+          )}
+
           {/* Platform Selector */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-300">Platform</label>
             <div className="grid grid-cols-4 gap-2">
-              {platforms.map((p) => (
+              {availablePlatforms.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => setPlatform(p.id)}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all ${
+                  onClick={() => p.connected && setPlatform(p.id)}
+                  disabled={!p.connected}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all relative ${
                     platform === p.id
                       ? "bg-violet-600/20 border-violet-500 text-white"
-                      : "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"
+                      : p.connected
+                      ? "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"
+                      : "bg-slate-800/30 border-slate-800 text-slate-600 cursor-not-allowed"
                   }`}
                 >
                   <span className="text-lg">{p.icon}</span>
                   <span className="text-sm font-medium">{p.name}</span>
+                  {!p.connected && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-slate-600 rounded-full"></span>
+                  )}
                 </button>
               ))}
             </div>
+            {!hasXConnected && (
+              <p className="text-xs text-slate-500">
+                Connect your X account in {<a href="/settings" className="text-violet-400 hover:underline">Settings</a>} to enable posting
+              </p>
+            )}
           </div>
 
           {/* Content Area */}
@@ -106,7 +158,8 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
               value={content}
               onChange={handleContentChange}
               placeholder="What would you like to share?"
-              className="w-full min-h-[160px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+              disabled={!hasXConnected}
+              className="w-full min-h-[160px] px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Use @ to mention, # for hashtags</span>
@@ -120,11 +173,17 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-300">Media</label>
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors">
+              <button 
+                disabled={!hasXConnected}
+                className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <ImageIcon className="w-4 h-4" />
                 <span className="text-sm">Add Image</span>
               </button>
-              <button className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors">
+              <button 
+                disabled={!hasXConnected}
+                className="flex items-center gap-2 px-4 py-3 bg-slate-800/50 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <span className="text-sm">🎬 Add Video</span>
               </button>
             </div>
@@ -140,7 +199,8 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+                  disabled={!hasXConnected}
+                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50"
                 />
               </div>
               <div className="relative w-32">
@@ -149,7 +209,8 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
                   type="time"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
-                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+                  disabled={!hasXConnected}
+                  className="w-full px-4 py-3 pl-10 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50"
                 />
               </div>
             </div>
@@ -160,7 +221,8 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/50">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+            disabled={!hasXConnected}
+            className="px-4 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
           >
             Save as Draft
           </button>
@@ -173,10 +235,10 @@ export function ComposerModal({ isOpen, onClose, initialDate }: ComposerModalPro
             </button>
             <button
               onClick={handleSave}
-              disabled={!content.trim()}
+              disabled={!content.trim() || !hasXConnected}
               className="px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
             >
-              Schedule Post
+              {hasXConnected ? 'Schedule Post' : 'Connect X to Post'}
             </button>
           </div>
         </div>
