@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { auth, clerkClient } from '@clerk/nextjs/server'
+import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
-export async function GET() {
+export async function POST(request: Request) {
   const { userId } = auth()
   
   if (!userId) {
@@ -12,34 +12,24 @@ export async function GET() {
   }
 
   try {
-    // Get the user's OAuth access token from Clerk
-    const clerkUser = await clerkClient.users.getUser(userId)
-    
-    // Check if user has X connected via Clerk
-    const xAccount = clerkUser.externalAccounts.find(
-      account => account.provider === 'x' || account.provider === 'twitter'
-    )
+    const body = await request.json()
+    const { username, name, pfp } = body
 
-    if (!xAccount) {
-      return NextResponse.json({ error: 'X not connected' }, { status: 400 })
+    if (!username) {
+      return NextResponse.json({ error: 'Username required' }, { status: 400 })
     }
 
-    // Get username from X account
-    const username = xAccount.username || xAccount.externalId
-    const name = clerkUser.firstName || username
-    const pfp = xAccount.imageUrl || clerkUser.imageUrl
-
-    // Create or get user in our database
+    // Create or update user
     const dbUser = await prisma.user.upsert({
       where: { clerkId: userId },
       update: {
-        name: name,
+        name: name || username,
         imageUrl: pfp
       },
       create: {
         clerkId: userId,
-        email: clerkUser.emailAddresses[0]?.emailAddress || `${userId}@clawdsocial.local`,
-        name: name,
+        email: `${userId.slice(0, 8)}@clawdsocial.local`,
+        name: name || username,
         imageUrl: pfp
       }
     })
@@ -49,13 +39,13 @@ export async function GET() {
       where: { slug: `user-${userId.slice(-8)}` },
       update: {},
       create: {
-        name: `${name}'s Workspace`,
+        name: `${name || username}'s Workspace`,
         slug: `user-${userId.slice(-8)}`,
         ownerId: dbUser.id
       }
     })
 
-    // Save X connection
+    // Save X account
     await prisma.socialAccount.upsert({
       where: {
         workspaceId_platform_accountHandle: {
@@ -65,7 +55,7 @@ export async function GET() {
         }
       },
       update: {
-        accountName: name,
+        accountName: name || username,
         profileImageUrl: pfp,
         isActive: true
       },
@@ -73,16 +63,16 @@ export async function GET() {
         workspaceId: workspace.id,
         platform: 'X',
         accountHandle: username,
-        accountName: name,
+        accountName: name || username,
         profileImageUrl: pfp,
         accessToken: 'clerk-managed',
         isActive: true
       }
     })
 
-    return NextResponse.json({ success: true, username })
+    return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('Error:', err)
+    console.error('Error saving X connection:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
