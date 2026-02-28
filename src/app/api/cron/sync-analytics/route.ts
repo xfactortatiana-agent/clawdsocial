@@ -3,6 +3,41 @@ import { prisma } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
+const X_CLIENT_ID = process.env.X_CLIENT_ID
+const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
+
+// Refresh X access token
+async function refreshXToken(refreshToken: string) {
+  try {
+    const response = await fetch('https://api.twitter.com/2/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString('base64')}`
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: X_CLIENT_ID || ''
+      })
+    })
+
+    if (!response.ok) {
+      console.error('Token refresh failed:', await response.text())
+      return null
+    }
+
+    const data = await response.json()
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || refreshToken
+    }
+  } catch (err) {
+    console.error('Error refreshing token:', err)
+    return null
+  }
+}
+
 // This endpoint syncs analytics from X - called by cron or manually
 export async function GET(request: Request) {
   // Verify cron secret
@@ -31,12 +66,29 @@ export async function GET(request: Request) {
 
     for (const account of accounts) {
       try {
+        let accessToken = account.accessToken
+
+        // Try to refresh token if we have a refresh token
+        if (account.refreshToken && account.refreshToken !== 'clerk-managed') {
+          const refreshed = await refreshXToken(account.refreshToken)
+          if (refreshed) {
+            await prisma.socialAccount.update({
+              where: { id: account.id },
+              data: {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken
+              }
+            })
+            accessToken = refreshed.accessToken
+          }
+        }
+
         // First get the user ID from username
         const userResponse = await fetch(
           `https://api.twitter.com/2/users/by/username/${account.accountHandle}`,
           {
             headers: { 
-              'Authorization': `Bearer ${account.accessToken}`,
+              'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'application/json'
             }
           }
@@ -45,9 +97,18 @@ export async function GET(request: Request) {
         if (!userResponse.ok) {
           const errorData = await userResponse.json()
           console.error(`Failed to fetch user for ${account.accountHandle}:`, errorData)
+          
+          // If unauthorized, mark account as needing reconnection
+          if (userResponse.status === 401) {
+            await prisma.socialAccount.update({
+              where: { id: account.id },
+              data: { isActive: false }
+            })
+          }
+          
           results.push({ 
             account: account.accountHandle, 
-            error: `User lookup failed: ${errorData.detail || userResponse.status}` 
+            error: `Token expired. Please reconnect your X account in Settings.` 
           })
           continue
         }
@@ -77,7 +138,7 @@ export async function GET(request: Request) {
           `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at&max_results=100`,
           {
             headers: { 
-              'Authorization': `Bearer ${account.accessToken}`,
+              'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'application/json'
             }
           }

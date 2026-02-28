@@ -193,9 +193,15 @@ export default function SettingsPage() {
                       )}
                       <div>
                         <p className="font-medium text-white">X (Twitter)</p>
-                        <p className="text-sm text-emerald-400">
-                          ✓ Connected — @{account.accountHandle}
-                        </p>
+                        {account.isActive ? (
+                          <p className="text-sm text-emerald-400">
+                            ✓ Connected — @{account.accountHandle}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-amber-400">
+                            ⚠ Token expired — reconnect needed
+                          </p>
+                        )}
                       </div>
                     </div>
                     

@@ -4,6 +4,41 @@ import { prisma } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
+const X_CLIENT_ID = process.env.X_CLIENT_ID
+const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
+
+// Refresh X access token
+async function refreshXToken(refreshToken: string) {
+  try {
+    const response = await fetch('https://api.twitter.com/2/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString('base64')}`
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: X_CLIENT_ID || ''
+      })
+    })
+
+    if (!response.ok) {
+      console.error('Token refresh failed:', await response.text())
+      return null
+    }
+
+    const data = await response.json()
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || refreshToken
+    }
+  } catch (err) {
+    console.error('Error refreshing token:', err)
+    return null
+  }
+}
+
 // GET - Fetch analytics for user's X account
 export async function GET() {
   const { userId } = auth()
@@ -30,7 +65,7 @@ export async function GET() {
     }
 
     // Get X account
-    const account = await prisma.socialAccount.findFirst({
+    let account = await prisma.socialAccount.findFirst({
       where: { 
         workspaceId: workspace.id,
         platform: 'X',
@@ -40,6 +75,21 @@ export async function GET() {
 
     if (!account) {
       return NextResponse.json({ analytics: null })
+    }
+
+    // Try to refresh token if we have a refresh token
+    if (account.refreshToken && account.refreshToken !== 'clerk-managed') {
+      const refreshed = await refreshXToken(account.refreshToken)
+      if (refreshed) {
+        await prisma.socialAccount.update({
+          where: { id: account.id },
+          data: {
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken
+          }
+        })
+        account = { ...account, accessToken: refreshed.accessToken }
+      }
     }
 
     // Fetch published posts with analytics
