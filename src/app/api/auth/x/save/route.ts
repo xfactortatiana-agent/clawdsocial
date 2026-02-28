@@ -1,34 +1,27 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { auth } from '@clerk/nextjs/server'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   try {
-    const { userId } = auth()
-    
-    if (!userId) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { username, name, pfp } = body
+    const { username, name, pfp, clerkId } = body
 
-    if (!username) {
-      return NextResponse.json({ error: 'Username required' }, { status: 400 })
+    if (!username || !clerkId) {
+      return NextResponse.json({ error: 'Username and clerkId required' }, { status: 400 })
     }
 
     // Create or get user
     const dbUser = await prisma.user.upsert({
-      where: { clerkId: userId },
+      where: { clerkId },
       update: {
         name: name || username,
         imageUrl: pfp
       },
       create: {
-        clerkId: userId,
-        email: `${userId}@clawdsocial.local`,
+        clerkId,
+        email: `${clerkId}@clawdsocial.local`,
         name: name || username,
         imageUrl: pfp
       }
@@ -36,11 +29,11 @@ export async function POST(request: Request) {
 
     // Create workspace
     const workspace = await prisma.workspace.upsert({
-      where: { slug: `user-${userId.slice(-8)}` },
+      where: { slug: `user-${clerkId.slice(-8)}` },
       update: {},
       create: {
         name: `${name || username}'s Workspace`,
-        slug: `user-${userId.slice(-8)}`,
+        slug: `user-${clerkId.slice(-8)}`,
         ownerId: dbUser.id
       }
     })
@@ -65,7 +58,7 @@ export async function POST(request: Request) {
         accountHandle: username,
         accountName: name || username,
         profileImageUrl: pfp,
-        accessToken: 'pending', // We need to get this from OAuth
+        accessToken: 'pending',
         isActive: true
       }
     })

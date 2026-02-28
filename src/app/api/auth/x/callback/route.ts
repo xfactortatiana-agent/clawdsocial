@@ -13,10 +13,12 @@ export async function GET(request: Request) {
   const error = searchParams.get('error')
   const state = searchParams.get('state')
 
-  console.log('OAuth callback - code:', code ? 'present' : 'missing', 'state:', state)
+  console.log('=== X OAUTH CALLBACK ===')
+  console.log('Code:', code ? 'present' : 'missing')
+  console.log('State:', state)
+  console.log('Error:', error)
 
   if (error) {
-    console.error('X OAuth error:', error)
     return NextResponse.redirect(
       new URL(`/settings?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
     )
@@ -27,7 +29,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Exchange code for access token
+    // Step 1: Exchange code for access token
+    console.log('Exchanging code for token...')
+    
     const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
       headers: {
@@ -49,11 +53,13 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) {
       console.error('Token error:', tokenData)
       return NextResponse.redirect(
-        new URL(`/settings?error=token_exchange`, request.url)
+        new URL(`/settings?error=token_exchange&details=${encodeURIComponent(JSON.stringify(tokenData))}`, request.url)
       )
     }
 
-    // Get user info from X
+    // Step 2: Get user info from X
+    console.log('Getting user info from X...')
+    
     const userResponse = await fetch('https://api.twitter.com/2/users/me?user.fields=profile_image_url,username,name', {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`
@@ -72,14 +78,16 @@ export async function GET(request: Request) {
     const xUser = userData.data
 
     if (!xUser || !xUser.username) {
-      console.error('No username in X response')
+      console.error('No username in response')
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
-    // For now, just redirect with success - we'll save to DB from the client side
-    // or create a separate API endpoint that the client calls after OAuth
+    // Step 3: Get user from cookie or create temp user
+    // For now, we'll use a temporary approach - store in cookie and let client save
+    console.log('Success! Redirecting with user data...')
+
     return NextResponse.redirect(
-      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}&name=${encodeURIComponent(xUser.name || '')}&pfp=${encodeURIComponent(xUser.profile_image_url || '')}`, request.url)
+      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}&name=${encodeURIComponent(xUser.name || '')}&pfp=${encodeURIComponent(xUser.profile_image_url || '')}&token=${encodeURIComponent(tokenData.access_token)}`, request.url)
     )
   } catch (err) {
     console.error('OAuth exception:', err)
