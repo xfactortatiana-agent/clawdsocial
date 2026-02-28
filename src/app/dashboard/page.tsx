@@ -82,7 +82,7 @@ export default function DashboardPage() {
               <FileText className="w-5 h-5" />
               <span>Posts</span>
             </Link>
-            <Link href="#" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800/50 rounded-xl transition-colors">
+            <Link href="/analytics" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800/50 rounded-xl transition-colors">
               <BarChart3 className="w-5 h-5" />
               <span>Analytics</span>
             </Link>

@@ -11,11 +11,16 @@ import {
   Eye, 
   Users,
   TrendingUp,
-  Calendar
+  Calendar,
+  Send,
+  Reply
 } from "lucide-react";
 
 export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<any>(null);
+  const [postsData, setPostsData] = useState<any[]>([]);
+  const [repliesData, setRepliesData] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'posts' | 'replies'>('posts');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -29,6 +34,25 @@ export default function AnalyticsPage() {
       if (res.ok) {
         const data = await res.json();
         setAnalytics(data.analytics);
+        
+        // Fetch posts and replies separately
+        const postsRes = await fetch('/api/posts');
+        if (postsRes.ok) {
+          const postsData = await postsRes.json();
+          const allPosts = postsData.posts || [];
+          
+          // Separate posts and replies based on content analysis
+          // Posts start with regular text, replies start with @
+          const posts = allPosts.filter((p: any) => 
+            p.status === 'PUBLISHED' && !p.content?.startsWith('@')
+          );
+          const replies = allPosts.filter((p: any) => 
+            p.status === 'PUBLISHED' && p.content?.startsWith('@')
+          );
+          
+          setPostsData(posts);
+          setRepliesData(replies);
+        }
       } else {
         setError('Failed to load analytics');
       }
@@ -66,7 +90,27 @@ export default function AnalyticsPage() {
     );
   }
 
-  const { account, overview, recentPosts } = analytics;
+  const { account, overview } = analytics;
+
+  // Calculate stats for posts vs replies
+  const postStats = {
+    count: postsData.length,
+    likes: postsData.reduce((sum, p) => sum + (p.likes || 0), 0),
+    replies: postsData.reduce((sum, p) => sum + (p.replies || 0), 0),
+    reposts: postsData.reduce((sum, p) => sum + (p.reposts || 0), 0),
+    impressions: postsData.reduce((sum, p) => sum + (p.impressions || 0), 0),
+  };
+
+  const replyStats = {
+    count: repliesData.length,
+    likes: repliesData.reduce((sum, p) => sum + (p.likes || 0), 0),
+    replies: repliesData.reduce((sum, p) => sum + (p.replies || 0), 0),
+    reposts: repliesData.reduce((sum, p) => sum + (p.reposts || 0), 0),
+    impressions: repliesData.reduce((sum, p) => sum + (p.impressions || 0), 0),
+  };
+
+  const activeData = activeTab === 'posts' ? postsData : repliesData;
+  const activeStats = activeTab === 'posts' ? postStats : replyStats;
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -101,7 +145,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Followers */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard 
             icon={Users} 
@@ -109,14 +153,14 @@ export default function AnalyticsPage() {
             value={account.followerCount.toLocaleString()} 
           />
           <StatCard 
-            icon={Calendar} 
-            label="Total Posts" 
-            value={overview.totalPosts.toString()} 
+            icon={Send} 
+            label="Posts" 
+            value={postStats.count.toString()} 
           />
           <StatCard 
-            icon={TrendingUp} 
-            label="Posts This Month" 
-            value={overview.postsThisMonth.toString()} 
+            icon={Reply} 
+            label="Replies" 
+            value={replyStats.count.toString()} 
           />
           <StatCard 
             icon={BarChart3} 
@@ -125,62 +169,97 @@ export default function AnalyticsPage() {
           />
         </div>
 
-        {/* Engagement Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatCard 
-            icon={Heart} 
-            label="Total Likes" 
-            value={overview.totalLikes.toLocaleString()} 
-            color="text-rose-400"
-          />
-          <StatCard 
-            icon={MessageCircle} 
-            label="Replies" 
-            value={overview.totalReplies.toLocaleString()} 
-            color="text-blue-400"
-          />
-          <StatCard 
-            icon={Repeat} 
-            label="Reposts" 
-            value={overview.totalReposts.toLocaleString()} 
-            color="text-emerald-400"
-          />
-          <StatCard 
-            icon={Eye} 
-            label="Impressions" 
-            value={overview.totalImpressions.toLocaleString()} 
-            color="text-violet-400"
-          />
+        {/* Posts vs Replies Toggle */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-8">
+          <div className="flex border-b border-slate-800">
+            <button
+              onClick={() => setActiveTab('posts')}
+              className={`flex-1 px-6 py-4 flex items-center justify-center gap-2 font-medium transition-colors ${
+                activeTab === 'posts' 
+                  ? 'bg-violet-600/20 text-violet-300 border-b-2 border-violet-500' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Send className="w-4 h-4" />
+              Posts ({postStats.count})
+            </button>
+            <button
+              onClick={() => setActiveTab('replies')}
+              className={`flex-1 px-6 py-4 flex items-center justify-center gap-2 font-medium transition-colors ${
+                activeTab === 'replies' 
+                  ? 'bg-violet-600/20 text-violet-300 border-b-2 border-violet-500' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Reply className="w-4 h-4" />
+              Replies ({replyStats.count})
+            </button>
+          </div>
+
+          {/* Stats for active tab */}
+          <div className="p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard 
+                icon={Heart} 
+                label="Likes" 
+                value={activeStats.likes.toLocaleString()} 
+                color="text-rose-400"
+              />
+              <StatCard 
+                icon={MessageCircle} 
+                label="Replies" 
+                value={activeStats.replies.toLocaleString()} 
+                color="text-blue-400"
+              />
+              <StatCard 
+                icon={Repeat} 
+                label="Reposts" 
+                value={activeStats.reposts.toLocaleString()} 
+                color="text-emerald-400"
+              />
+              <StatCard 
+                icon={Eye} 
+                label="Impressions" 
+                value={activeStats.impressions.toLocaleString()} 
+                color="text-violet-400"
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Recent Posts */}
+        {/* Content List */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800">
-            <h2 className="font-semibold text-white">Recent Posts</h2>
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+            <h2 className="font-semibold text-white">
+              {activeTab === 'posts' ? 'Recent Posts' : 'Recent Replies'}
+            </h2>
+            <span className="text-sm text-slate-500">
+              {activeData.length} total
+            </span>
           </div>
 
           <div className="divide-y divide-slate-800">
-            {recentPosts.length === 0 ? (
+            {activeData.length === 0 ? (
               <div className="px-6 py-8 text-center text-slate-500">
-                No published posts yet. {<a href="/dashboard" className="text-violet-400 hover:underline">Create your first post</a>}
+                No {activeTab} found. {<a href="/dashboard" className="text-violet-400 hover:underline">Create your first post</a>}
               </div>
             ) : (
-              recentPosts.map((post: any) => (
+              activeData.slice(0, 20).map((post: any) => (
                 <div key={post.id} className="px-6 py-4">
                   <p className="text-slate-300 text-sm mb-3">{post.content}</p>
                   <div className="flex items-center gap-4 text-xs text-slate-500">
                     <span>{post.publishedAt && new Date(post.publishedAt).toLocaleDateString()}</span>
                     <span className="flex items-center gap-1">
-                      <Heart className="w-3 h-3" /> {post.likes}
+                      <Heart className="w-3 h-3" /> {post.likes || 0}
                     </span>
                     <span className="flex items-center gap-1">
-                      <MessageCircle className="w-3 h-3" /> {post.replies}
+                      <MessageCircle className="w-3 h-3" /> {post.replies || 0}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Repeat className="w-3 h-3" /> {post.reposts}
+                      <Repeat className="w-3 h-3" /> {post.reposts || 0}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" /> {post.impressions.toLocaleString()}
+                      <Eye className="w-3 h-3" /> {(post.impressions || 0).toLocaleString()}
                     </span>
                   </div>
                 </div>
