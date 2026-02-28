@@ -20,43 +20,49 @@ export async function GET(request: Request) {
       }
     })
 
+    if (accounts.length === 0) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No X accounts found to sync' 
+      })
+    }
+
     const results = []
 
     for (const account of accounts) {
       try {
-        // Fetch user's tweets from X API
-        const tweetsResponse = await fetch(
-          `https://api.twitter.com/2/users/by/username/${account.accountHandle}?tweet.fields=public_metrics,created_at`,
+        // First get the user ID from username
+        const userResponse = await fetch(
+          `https://api.twitter.com/2/users/by/username/${account.accountHandle}`,
           {
-            headers: { 'Authorization': `Bearer ${account.accessToken}` }
+            headers: { 
+              'Authorization': `Bearer ${account.accessToken}`,
+              'Content-Type': 'application/json'
+            }
           }
         )
 
-        if (!tweetsResponse.ok) {
-          console.error(`Failed to fetch user for ${account.accountHandle}`)
+        if (!userResponse.ok) {
+          const errorData = await userResponse.json()
+          console.error(`Failed to fetch user for ${account.accountHandle}:`, errorData)
+          results.push({ 
+            account: account.accountHandle, 
+            error: `User lookup failed: ${errorData.detail || userResponse.status}` 
+          })
           continue
         }
 
-        const userData = await tweetsResponse.json()
+        const userData = await userResponse.json()
         const userId = userData.data?.id
 
-        if (!userId) continue
-
-        // Fetch recent tweets
-        const tweets = await fetch(
-          `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at&max_results=100`,
-          {
-            headers: { 'Authorization': `Bearer ${account.accessToken}` }
-          }
-        )
-
-        if (!tweets.ok) {
-          console.error(`Failed to fetch tweets for ${account.accountHandle}`)
+        if (!userId) {
+          results.push({ 
+            account: account.accountHandle, 
+            error: 'No user ID found' 
+          })
           continue
         }
 
-        const tweetsData = await tweets.json()
-        
         // Update follower count
         await prisma.socialAccount.update({
           where: { id: account.id },
@@ -66,58 +72,102 @@ export async function GET(request: Request) {
           }
         })
 
-        // Update posts with analytics
-        for (const tweet of tweetsData.data || []) {
-          const existingPost = await prisma.post.findFirst({
-            where: { platformPostId: tweet.id }
-          })
+        // Fetch recent tweets
+        const tweetsResponse = await fetch(
+          `https://api.twitter.com/2/users/${userId}/tweets?tweet.fields=public_metrics,created_at&max_results=100`,
+          {
+            headers: { 
+              'Authorization': `Bearer ${account.accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
 
-          if (existingPost) {
-            await prisma.post.update({
-              where: { id: existingPost.id },
-              data: {
-                likes: tweet.public_metrics?.like_count,
-                replies: tweet.public_metrics?.reply_count,
-                reposts: tweet.public_metrics?.retweet_count,
-                impressions: tweet.public_metrics?.impression_count,
-                engagements: (tweet.public_metrics?.like_count || 0) + 
-                            (tweet.public_metrics?.reply_count || 0) + 
-                            (tweet.public_metrics?.retweet_count || 0)
-              }
+        if (!tweetsResponse.ok) {
+          const errorData = await tweetsResponse.json()
+          console.error(`Failed to fetch tweets for ${account.accountHandle}:`, errorData)
+          results.push({ 
+            account: account.accountHandle, 
+            error: `Tweets fetch failed: ${errorData.detail || tweetsResponse.status}` 
+          })
+          continue
+        }
+
+        const tweetsData = await tweetsResponse.json()
+        const tweets = tweetsData.data || []
+        let synced = 0
+
+        // Update posts with analytics
+        for (const tweet of tweets) {
+          try {
+            const existingPost = await prisma.post.findFirst({
+              where: { platformPostId: tweet.id }
             })
-          } else {
-            // Create post record for historical tweets
-            await prisma.post.create({
-              data: {
-                workspaceId: account.workspaceId,
-                accountId: account.id,
-                createdById: account.userId || '',
-                content: tweet.text,
-                status: 'PUBLISHED',
-                publishedAt: new Date(tweet.created_at),
-                platformPostId: tweet.id,
-                likes: tweet.public_metrics?.like_count,
-                replies: tweet.public_metrics?.reply_count,
-                reposts: tweet.public_metrics?.retweet_count,
-                impressions: tweet.public_metrics?.impression_count,
-                engagements: (tweet.public_metrics?.like_count || 0) + 
-                            (tweet.public_metrics?.reply_count || 0) + 
-                            (tweet.public_metrics?.retweet_count || 0)
-              }
-            })
+
+            if (existingPost) {
+              await prisma.post.update({
+                where: { id: existingPost.id },
+                data: {
+                  likes: tweet.public_metrics?.like_count || 0,
+                  replies: tweet.public_metrics?.reply_count || 0,
+                  reposts: tweet.public_metrics?.retweet_count || 0,
+                  impressions: tweet.public_metrics?.impression_count || 0,
+                  engagements: (tweet.public_metrics?.like_count || 0) + 
+                              (tweet.public_metrics?.reply_count || 0) + 
+                              (tweet.public_metrics?.retweet_count || 0)
+                }
+              })
+            } else {
+              // Create post record for historical tweets
+              await prisma.post.create({
+                data: {
+                  workspaceId: account.workspaceId,
+                  accountId: account.id,
+                  createdById: account.userId || '',
+                  content: tweet.text,
+                  status: 'PUBLISHED',
+                  publishedAt: new Date(tweet.created_at),
+                  platformPostId: tweet.id,
+                  likes: tweet.public_metrics?.like_count || 0,
+                  replies: tweet.public_metrics?.reply_count || 0,
+                  reposts: tweet.public_metrics?.retweet_count || 0,
+                  impressions: tweet.public_metrics?.impression_count || 0,
+                  engagements: (tweet.public_metrics?.like_count || 0) + 
+                              (tweet.public_metrics?.reply_count || 0) + 
+                              (tweet.public_metrics?.retweet_count || 0)
+                }
+              })
+            }
+            synced++
+          } catch (err) {
+            console.error(`Error processing tweet ${tweet.id}:`, err)
           }
         }
 
-        results.push({ account: account.accountHandle, synced: tweetsData.data?.length || 0 })
+        results.push({ 
+          account: account.accountHandle, 
+          synced,
+          totalFetched: tweets.length
+        })
       } catch (err) {
         console.error(`Error syncing ${account.accountHandle}:`, err)
-        results.push({ account: account.accountHandle, error: 'Sync failed' })
+        results.push({ 
+          account: account.accountHandle, 
+          error: err instanceof Error ? err.message : 'Sync failed' 
+        })
       }
     }
 
-    return NextResponse.json({ success: true, results })
+    return NextResponse.json({ 
+      success: true, 
+      results,
+      totalAccounts: accounts.length
+    })
   } catch (err) {
     console.error('Cron error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: err instanceof Error ? err.message : 'Unknown error'
+    }, { status: 500 })
   }
 }

@@ -62,22 +62,33 @@ export default function SettingsPage() {
       });
 
       const data = await res.json();
+      console.log('Sync response:', data);
 
-      if (res.ok) {
+      if (res.ok && data.success) {
         const totalSynced = data.results?.reduce((sum: number, r: any) => sum + (r.synced || 0), 0) || 0;
-        setSyncResult({
-          success: true,
-          message: `Synced ${totalSynced} posts from X`
-        });
+        const errors = data.results?.filter((r: any) => r.error) || [];
+        
+        if (errors.length > 0) {
+          setSyncResult({
+            success: false,
+            message: `Sync partially failed: ${errors[0].error}`
+          });
+        } else {
+          setSyncResult({
+            success: true,
+            message: `Synced ${totalSynced} posts from X`
+          });
+        }
         // Refresh accounts to show updated data
         fetchXAccounts();
       } else {
         setSyncResult({
           success: false,
-          message: data.error || 'Sync failed'
+          message: data.error || data.details || 'Sync failed'
         });
       }
     } catch (err) {
+      console.error('Sync error:', err);
       setSyncResult({
         success: false,
         message: 'Network error during sync'
