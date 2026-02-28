@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { oauthStates } from '@/lib/oauth-store'
 
 export const runtime = 'nodejs'
 
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
 const REDIRECT_URI = 'https://clawdsocial.vercel.app/api/auth/x/callback'
-
-// In-memory store for OAuth state
-const oauthStates = new Map()
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -30,13 +28,13 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/settings?error=no_code', request.url))
   }
 
-  const clerkId = oauthStates.get(state)
+  const clerkId = oauthStates.get(state || '')
   if (!clerkId) {
     console.error('No clerkId for state:', state)
     return NextResponse.redirect(new URL('/settings?error=session_expired', request.url))
   }
   
-  oauthStates.delete(state)
+  oauthStates.delete(state || '')
 
   try {
     const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
@@ -133,6 +131,3 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/settings?error=exception', request.url))
   }
 }
-
-// Export the store for the other route
-export { oauthStates }
