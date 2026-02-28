@@ -48,7 +48,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   // AI Generation states
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
-  const [aiTone, setAiTone] = useState("professional");
+  const [aiTone, setAiTone] = useState("match_voice");
   const [aiLength, setAiLength] = useState("medium");
   const [aiType, setAiType] = useState<'single' | 'thread'>('single');
   const [generatedOptions, setGeneratedOptions] = useState<string[]>([]);
