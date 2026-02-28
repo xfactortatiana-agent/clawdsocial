@@ -5,6 +5,7 @@ import { ComposerModal } from "@/components/composer/ComposerModal";
 import { useState } from "react";
 import Link from "next/link";
 import { Calendar, Plus, Settings, BarChart3, FileText } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 
 const mockPosts = [
   {
@@ -97,7 +98,14 @@ export default function DashboardPage() {
               <Plus className="w-4 h-4" />
               New Post
             </button>
-            <div className="w-10 h-10 bg-gradient-to-br from-slate-600 to-slate-700 rounded-full"></div>
+            <UserButton 
+              afterSignOutUrl="/"
+              appearance={{
+                elements: {
+                  avatarBox: "w-10 h-10 rounded-full border border-slate-700"
+                }
+              }}
+            />
           </div>
         </header>
 
