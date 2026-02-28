@@ -5,6 +5,7 @@ import { TerminalText } from "@/components/effects/TerminalText";
 import { ScrollReveal } from "@/components/effects/ScrollReveal";
 import { GlowCard } from "@/components/effects/GlowCard";
 import { AnimatedCounter } from "@/components/effects/AnimatedCounter";
+import { Header } from "@/components/layout/Header";
 
 const features = [
   { icon: Calendar, title: "Visual Calendar", desc: "Drag, drop, and schedule with an intuitive interface", color: "from-violet-500/20 to-purple-500/20" },
@@ -27,38 +28,12 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       <ParticleBackground />
       
-      {/* Floating Orbs */}
       <div className="fixed top-1/4 left-1/4 w-[500px] h-[500px] bg-violet-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" />
       <div className="fixed bottom-1/4 right-1/4 w-[600px] h-[600px] bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
       <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-fuchsia-600/5 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/50 backdrop-blur-2xl border-b border-slate-800/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-cyan-500 rounded-xl blur-lg opacity-50 group-hover:opacity-100 transition-opacity" />
-              <div className="relative w-10 h-10 bg-gradient-to-br from-violet-600 to-cyan-600 rounded-xl flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-white" />
-              </div>
-            </div>
-            <span className="font-bold text-xl text-white">ClawdSocial</span>
-          </Link>
+      <Header />
 
-          <div className="hidden md:flex items-center gap-8">
-            <Link href="#features" className="text-sm text-slate-400 hover:text-white transition-colors">Features</Link>
-            <Link href="#stats" className="text-sm text-slate-400 hover:text-white transition-colors">Stats</Link>
-            <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white transition-colors">Dashboard</Link>
-          </div>
-
-          <Link href="/dashboard" className="group relative px-5 py-2.5 overflow-hidden rounded-lg">
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-cyan-600 transition-transform group-hover:scale-105" />
-            <span className="relative text-white text-sm font-semibold">Get Started</span>
-          </Link>
-        </div>
-      </nav>
-
-      {/* Hero */}
       <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
@@ -107,7 +82,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats */}
       <section id="stats" className="py-20 px-4 border-y border-slate-800/50">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
@@ -125,7 +99,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features */}
       <section id="features" className="py-20 px-4">
         <div className="max-w-6xl mx-auto">
           <ScrollReveal>
@@ -147,7 +120,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="py-20 px-4">
         <ScrollReveal>
           <div className="max-w-4xl mx-auto text-center p-12 rounded-3xl bg-gradient-to-br from-violet-600/20 via-fuchsia-600/20 to-cyan-600/20 border border-slate-700/50">
@@ -160,7 +132,6 @@ export default function Home() {
         </ScrollReveal>
       </section>
 
-      {/* Footer */}
       <footer className="py-12 px-4 border-t border-slate-800/50">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
