@@ -10,10 +10,18 @@ export default function SettingsPage() {
   const [xUsername, setXUsername] = useState("");
   const [xPfp, setXPfp] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [debugInfo, setDebugInfo] = useState("");
 
   // Check if user has X connected via Clerk
   useEffect(() => {
     if (user) {
+      console.log('User external accounts:', user.externalAccounts);
+      setDebugInfo(JSON.stringify(user.externalAccounts.map((a: any) => ({ 
+        provider: a.provider, 
+        username: a.username,
+        name: a.name 
+      })), null, 2));
+      
       const xAccount = user.externalAccounts.find(
         (account) => account.provider === 'x' || account.provider === 'twitter'
       );
@@ -49,18 +57,19 @@ export default function SettingsPage() {
   };
 
   const handleConnectX = () => {
-    // Open Clerk's user profile with connected accounts tab
     if (user) {
-      // @ts-ignore - createExternalAccount exists but types may not show it
+      // @ts-ignore
       user.createExternalAccount({
         strategy: 'oauth_x',
         redirectUrl: window.location.href,
       }).then((result: any) => {
+        console.log('createExternalAccount result:', result);
         if (result.verification?.externalVerificationRedirectURL) {
           window.location.href = result.verification.externalVerificationRedirectURL;
         }
       }).catch((err: any) => {
         console.error('Failed to start X connection:', err);
+        alert('Error: ' + err.message);
       });
     }
   };
@@ -98,7 +107,7 @@ export default function SettingsPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
           <div className="px-6 py-4 border-b border-slate-800">
             <h2 className="font-semibold text-white">Connected Accounts</h2>
             <p className="text-sm text-slate-400">Link your social media accounts</p>
@@ -136,6 +145,12 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Debug info */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <p className="text-sm text-slate-400 mb-2">Debug Info:</p>
+          <pre className="text-xs text-slate-500 overflow-auto">{debugInfo || 'No external accounts'}</pre>
         </div>
       </main>
     </div>
