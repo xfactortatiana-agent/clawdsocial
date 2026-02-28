@@ -63,7 +63,7 @@ export default function SettingsPage() {
       });
       
       if (res?.verification?.externalVerificationRedirectURL) {
-        window.location.href = res.verification.externalVerificationRedirectURL;
+        window.location.href = res.verification.externalVerificationRedirectURL.href;
       } else {
         setError("Failed to get X authorization URL. Please check your Clerk Dashboard X configuration.");
       }
