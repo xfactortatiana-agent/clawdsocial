@@ -11,45 +11,54 @@ const getRedirectUri = () => {
   return 'http://localhost:3000/api/auth/x/callback'
 }
 
+// Base64 encode without Buffer (for Edge runtime)
+function base64Encode(str: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  let result = ''
+  let i = 0
+  while (i < str.length) {
+    const a = str.charCodeAt(i++)
+    const b = i < str.length ? str.charCodeAt(i++) : 0
+    const c = i < str.length ? str.charCodeAt(i++) : 0
+    const bitmap = (a << 16) | (b << 8) | c
+    result += chars.charAt((bitmap >> 18) & 63)
+    result += chars.charAt((bitmap >> 12) & 63)
+    result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '='
+    result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '='
+  }
+  return result
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
-  const state = searchParams.get('state')
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
 
-  console.log('=== OAUTH CALLBACK DEBUG ===')
-  console.log('Full URL:', request.url)
-  console.log('Code:', code ? `${code.slice(0, 20)}...` : 'null')
-  console.log('Error from X:', error)
-  console.log('Error description:', errorDescription)
-  console.log('State:', state)
+  console.log('=== OAUTH CALLBACK ===')
+  console.log('Code:', code ? 'present' : 'missing')
+  console.log('Error:', error)
 
-  // Check for OAuth errors from X
   if (error) {
-    console.error('X returned error:', error, errorDescription)
     return NextResponse.redirect(
       new URL(`/dashboard?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
     )
   }
 
   if (!code) {
-    console.error('No code received')
     return NextResponse.redirect(new URL('/dashboard?error=no_code', request.url))
   }
 
   if (!X_CLIENT_ID || !X_CLIENT_SECRET) {
-    console.error('Missing credentials')
     return NextResponse.redirect(new URL('/dashboard?error=missing_credentials', request.url))
   }
 
   try {
     const redirectUri = getRedirectUri()
-    console.log('Redirect URI:', redirectUri)
-
-    // Build auth header
-    const authHeader = `Basic ${Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString('base64')}`
-    console.log('Auth header length:', authHeader.length)
+    
+    // Build auth header using custom base64
+    const authString = `${X_CLIENT_ID}:${X_CLIENT_SECRET}`
+    const authHeader = `Basic ${base64Encode(authString)}`
 
     // Exchange code for access token
     const tokenBody = new URLSearchParams({
@@ -60,8 +69,6 @@ export async function GET(request: Request) {
       code_verifier: 'challenge'
     })
 
-    console.log('Token request body:', tokenBody.toString())
-
     const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
       headers: {
@@ -71,26 +78,16 @@ export async function GET(request: Request) {
       body: tokenBody
     })
 
-    console.log('Token response status:', tokenResponse.status)
-    
     const responseText = await tokenResponse.text()
-    console.log('Token response body:', responseText)
-
-    let tokenData
-    try {
-      tokenData = JSON.parse(responseText)
-    } catch {
-      tokenData = { raw: responseText }
-    }
+    console.log('Token response:', tokenResponse.status, responseText.slice(0, 200))
 
     if (!tokenResponse.ok) {
-      console.error('Token exchange failed:', tokenData)
       return NextResponse.redirect(
         new URL(`/dashboard?error=token_exchange&status=${tokenResponse.status}`, request.url)
       )
     }
 
-    console.log('Token exchange successful')
+    const tokenData = JSON.parse(responseText)
 
     // Get user info from X
     const userResponse = await fetch('https://api.twitter.com/2/users/me', {
@@ -100,15 +97,11 @@ export async function GET(request: Request) {
     })
 
     if (!userResponse.ok) {
-      const userError = await userResponse.text()
-      console.error('Failed to get user info:', userError)
       return NextResponse.redirect(new URL('/dashboard?error=user_info_failed', request.url))
     }
 
     const userData = await userResponse.json()
     const xUser = userData.data
-
-    console.log('Got X user:', xUser?.username)
 
     // Store in database
     await prisma.socialAccount.upsert({
@@ -138,10 +131,9 @@ export async function GET(request: Request) {
       }
     })
 
-    console.log('Saved to database, redirecting...')
     return NextResponse.redirect(new URL(`/dashboard?connected=x&username=${xUser.username}`, request.url))
   } catch (error) {
-    console.error('Exception in callback:', error)
+    console.error('Callback error:', error)
     return NextResponse.redirect(new URL('/dashboard?error=exception', request.url))
   }
 }
