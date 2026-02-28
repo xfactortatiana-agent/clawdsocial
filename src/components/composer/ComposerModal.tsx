@@ -18,10 +18,10 @@ import {
   List,
   Hash,
   AtSign,
-  Globe,
   Eye,
   Trash2,
-  Plus
+  Plus,
+  Send
 } from "lucide-react";
 
 interface ComposerModalProps {
