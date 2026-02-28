@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { oauthStates } from '@/lib/oauth-store'
+import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
 
@@ -15,28 +15,41 @@ export async function GET(request: Request) {
   const error = searchParams.get('error')
 
   console.log('=== X OAUTH CALLBACK ===')
-  console.log('Code:', code ? `${code.slice(0, 10)}...` : 'missing')
-  console.log('State:', state)
+  console.log('Code:', code ? 'present' : 'missing')
+  console.log('State param:', state)
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(`/settings?error=x_oauth&msg=${encodeURIComponent(error)}`, request.url)
-    )
+    console.error('X error:', error)
+    return NextResponse.redirect(new URL(`/settings?error=x_oauth`, request.url))
   }
 
   if (!code) {
     return NextResponse.redirect(new URL('/settings?error=no_code', request.url))
   }
 
-  const clerkId = oauthStates.get(state || '')
+  // Get clerkId from cookie
+  const cookieStore = cookies()
+  const clerkId = cookieStore.get('oauth_clerk_id')?.value
+  const storedState = cookieStore.get('oauth_state')?.value
+
+  console.log('Cookie clerkId:', clerkId ? 'present' : 'missing')
+  console.log('Cookie state:', storedState)
+  console.log('State match:', storedState === state)
+
   if (!clerkId) {
-    console.error('No clerkId for state:', state)
-    return NextResponse.redirect(new URL('/settings?error=session_expired', request.url))
+    console.error('No clerkId cookie')
+    return NextResponse.redirect(new URL('/settings?error=no_session', request.url))
   }
-  
-  oauthStates.delete(state || '')
+
+  if (storedState !== state) {
+    console.error('State mismatch')
+    return NextResponse.redirect(new URL('/settings?error=invalid_state', request.url))
+  }
 
   try {
+    // Exchange code for token
+    console.log('Exchanging code for token...')
+    
     const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
       headers: {
@@ -53,31 +66,42 @@ export async function GET(request: Request) {
     })
 
     const tokenData = await tokenResponse.json()
+    console.log('Token status:', tokenResponse.status)
 
     if (!tokenResponse.ok) {
-      console.error('Token error:', tokenData)
-      return NextResponse.redirect(new URL(`/settings?error=token_exchange`, request.url))
+      console.error('Token error:', JSON.stringify(tokenData))
+      return NextResponse.redirect(new URL(`/settings?error=token_failed`, request.url))
     }
 
+    // Get X user info
+    console.log('Getting X user info...')
+    
     const userResponse = await fetch('https://api.twitter.com/2/users/me?user.fields=profile_image_url,username,name', {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     })
 
     if (!userResponse.ok) {
+      console.error('User info failed:', userResponse.status)
       return NextResponse.redirect(new URL('/settings?error=user_info_failed', request.url))
     }
 
     const userData = await userResponse.json()
     const xUser = userData.data
+    console.log('X username:', xUser?.username)
 
     if (!xUser?.username) {
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
     // Save to database
+    console.log('Saving to database...')
+    
     const dbUser = await prisma.user.upsert({
       where: { clerkId },
-      update: { name: xUser.name || xUser.username, imageUrl: xUser.profile_image_url },
+      update: { 
+        name: xUser.name || xUser.username, 
+        imageUrl: xUser.profile_image_url 
+      },
       create: {
         clerkId,
         email: `${clerkId.slice(0, 8)}@clawdsocial.local`,
@@ -123,11 +147,19 @@ export async function GET(request: Request) {
       }
     })
 
-    return NextResponse.redirect(
-      new URL(`/settings?success=connected&username=${encodeURIComponent(xUser.username)}`, request.url)
+    console.log('Success! Redirecting...')
+
+    // Clear cookies and redirect
+    const response = NextResponse.redirect(
+      new URL(`/settings?success=connected`, request.url)
     )
+    response.cookies.delete('oauth_clerk_id')
+    response.cookies.delete('oauth_state')
+    
+    return response
+
   } catch (err) {
-    console.error('OAuth error:', err)
+    console.error('Exception:', err)
     return NextResponse.redirect(new URL('/settings?error=exception', request.url))
   }
 }
