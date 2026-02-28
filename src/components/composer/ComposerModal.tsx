@@ -54,7 +54,13 @@ const lengths = [
   { id: 'thread', name: 'Thread', chars: 'Multiple tweets' },
 ];
 
-const emojis = ['🔥','💡','🚀','⚡️','✨','🎯','💪','🎉','👏','🤔','👀','💯','🙌','🔥','⚡️','🚀'];
+const emojis = {
+  fire: ['🔥', '⚡️', '💥', '🚀', '💫', '✨', '🌟', '💪'],
+  hearts: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍'],
+  faces: ['😀', '😂', '🤔', '😎', '🤯', '🥳', '😍', '🙄'],
+  objects: ['💡', '🎯', '📊', '💰', '🔑', '📈', '🎉', '🎁'],
+  gestures: ['👍', '👏', '🙌', '✌️', '🤝', '👆', '👇', '💯']
+};
 
 // Parse content with formatting to React elements
 function renderFormattedText(text: string): React.ReactNode {
@@ -628,16 +634,25 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                 </button>
                 
                 {showEmojiPicker && (
-                  <div className="absolute top-full left-0 mt-2 p-3 bg-slate-800 border border-slate-700 rounded-xl shadow-xl grid grid-cols-8 gap-1 z-10">
-                    {emojis.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => insertText(emoji, '')}
-                        className="w-8 h-8 hover:bg-slate-700 rounded-lg flex items-center justify-center text-lg"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+                  <div className="absolute top-full left-0 mt-2 p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-10 w-72">
+                    <div className="space-y-3">
+                      {Object.entries(emojis).map(([category, emojiList]) => (
+                        <div key={category}>
+                          <p className="text-xs text-slate-500 uppercase mb-2">{category}</p>
+                          <div className="grid grid-cols-8 gap-1">
+                            {emojiList.map((emoji) => (
+                              <button
+                                key={emoji}
+                                onClick={() => insertText(emoji, '')}
+                                className="w-7 h-7 hover:bg-slate-700 rounded-lg flex items-center justify-center text-lg transition-colors"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

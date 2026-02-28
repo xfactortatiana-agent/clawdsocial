@@ -36,6 +36,46 @@ interface Post {
   impressions?: number;
 }
 
+// Parse content with formatting to React elements
+function renderFormattedText(text: string): React.ReactNode {
+  if (!text) return null;
+  
+  // Split by patterns: **bold**, *italic*, `code`, #hashtag, @mention, https://links
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|#[\w]+|@[\w]+|https?:\/\/[^\s]+)/g);
+  
+  return parts.map((part, i) => {
+    // Bold: **text**
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="font-bold text-white">{part.slice(2, -2)}</strong>;
+    }
+    // Italic: *text*
+    if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+      return <em key={i} className="italic text-slate-200">{part.slice(1, -1)}</em>;
+    }
+    // Code: `text`
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} className="px-1.5 py-0.5 bg-slate-700 rounded text-sm font-mono text-cyan-400">{part.slice(1, -1)}</code>;
+    }
+    // Hashtag: #word
+    if (part.startsWith('#') && part.length > 1) {
+      return <span key={i} className="text-violet-400">{part}</span>;
+    }
+    // Mention: @word
+    if (part.startsWith('@') && part.length > 1) {
+      return <span key={i} className="text-blue-400">{part}</span>;
+    }
+    // Link: https://
+    if (part.startsWith('http')) {
+      return (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+          {part.length > 30 ? part.slice(0, 30) + '...' : part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export default function DashboardPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
@@ -222,7 +262,7 @@ export default function DashboardPage() {
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <p className="text-slate-300 text-sm line-clamp-2 mb-2">{post.content}</p>
+                          <p className="text-slate-300 text-sm line-clamp-2 mb-2">{renderFormattedText(post.content)}</p>
                           
                           <div className="flex items-center gap-3 text-xs text-slate-500">
                             <span className="flex items-center gap-1">
@@ -271,7 +311,7 @@ export default function DashboardPage() {
                     <div key={post.id} className="px-6 py-4 hover:bg-slate-800/30 transition-colors">
                       <div className="flex items-start gap-4">
                         <div className="flex-1 min-w-0">
-                          <p className="text-slate-300 text-sm line-clamp-2 mb-3">{post.content}</p>
+                          <p className="text-slate-300 text-sm line-clamp-2 mb-3">{renderFormattedText(post.content)}</p>
                           
                           <div className="flex items-center gap-4 text-xs">
                             <span className="flex items-center gap-1 text-rose-400">
