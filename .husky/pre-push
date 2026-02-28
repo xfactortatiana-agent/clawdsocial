@@ -1,0 +1,96 @@
+#!/bin/bash
+
+set -e
+
+echo "🔍 Running pre-push checks..."
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Track if we made fixes
+FIXES_MADE=false
+
+# Function to attempt auto-fix
+try_fix() {
+    echo -e "${YELLOW}⚡ Attempting auto-fix...${NC}"
+    
+    # Fix 1: Missing imports (common issue)
+    if grep -q "Cannot find name" /tmp/build.log 2>/dev/null; then
+        MISSING=$(grep "Cannot find name" /tmp/build.log | grep -o "'[A-Z][a-zA-Z]*'" | tr -d "'" | sort -u)
+        for name in $MISSING; do
+            echo "Found missing: $name"
+            # Check if it's a Lucide icon
+            if [[ "$name" =~ ^(X|Check|Loader2|Send|Calendar|Clock|Plus|Trash2|Bold|Italic|Hash|AtSign|Image|Wand2|Sparkles|ChevronDown|ChevronUp|GripVertical|Save|Zap|MoreHorizontal|AlertCircle|Type|MessageSquarePlus|Wand|Flame|Scissors|ListOrdered|Eye|ChevronLeft|ChevronRight|BarChart3|TrendingUp|Users|Heart|MessageCircle|Repeat|MessageSquare)$ ]]; then
+                echo "Adding $name to Lucide imports..."
+                # This would need actual file editing logic
+            fi
+        done
+    fi
+    
+    # Fix 2: Type errors with 'as any'
+    if grep -q "Type error:" /tmp/build.log 2>/dev/null; then
+        echo "Type errors detected - manual fix required"
+    fi
+}
+
+# Check for TypeScript errors
+echo "📦 Checking TypeScript..."
+if ! npx tsc --noEmit 2>&1 | tee /tmp/tsc.log; then
+    echo -e "${RED}❌ TypeScript errors found.${NC}"
+    
+    # Try to fix common issues
+    if grep -q "Cannot find name 'X'" /tmp/tsc.log; then
+        echo -e "${YELLOW}🔧 Auto-fixing: Missing X import${NC}"
+        # Add X to dashboard imports if missing
+        if [ -f "src/app/dashboard/page.tsx" ]; then
+            if ! grep -q "X" src/app/dashboard/page.tsx | grep -q "from \"lucide-react\""; then
+                sed -i 's/} from "lucide-react";/  X,\n} from "lucide-react";/' src/app/dashboard/page.tsx 2>/dev/null || true
+                FIXES_MADE=true
+            fi
+        fi
+    fi
+    
+    if [ "$FIXES_MADE" = true ]; then
+        echo -e "${GREEN}✅ Auto-fixes applied. Retrying...${NC}"
+        exec "$0" "$@"
+    fi
+    
+    echo -e "${RED}❌ Push blocked. Fix errors manually.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ TypeScript check passed${NC}"
+
+# Check for build errors
+echo "🏗️  Checking build..."
+if ! npm run build 2>&1 | tee /tmp/build.log; then
+    echo -e "${RED}❌ Build failed.${NC}"
+    
+    # Check for specific errors and try to fix
+    if grep -q "Cannot find module 'openai'" /tmp/build.log; then
+        echo -e "${YELLOW}🔧 Auto-fixing: Installing openai${NC}"
+        npm install openai
+        FIXES_MADE=true
+    fi
+    
+    if grep -q "Cannot find module '@clerk/nextjs'" /tmp/build.log; then
+        echo -e "${YELLOW}🔧 Auto-fixing: Installing @clerk/nextjs${NC}"
+        npm install @clerk/nextjs
+        FIXES_MADE=true
+    fi
+    
+    if [ "$FIXES_MADE" = true ]; then
+        echo -e "${GREEN}✅ Dependencies installed. Retrying build...${NC}"
+        exec "$0" "$@"
+    fi
+    
+    echo -e "${RED}❌ Push blocked. Fix build errors manually.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Build check passed${NC}"
+echo -e "${GREEN}🚀 All checks passed! Pushing...${NC}"
+exit 0
