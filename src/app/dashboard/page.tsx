@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Sparkles,
   Send,
-  MoreHorizontal
+  MoreHorizontal,
+  X
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { format, isToday, isTomorrow, addDays } from "date-fns";
