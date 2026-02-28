@@ -52,6 +52,11 @@ interface AIMode {
   prompt: string;
 }
 
+interface MediaValidationError {
+  file: string;
+  error: string;
+}
+
 const emojis = {
   fire: ['🔥', '⚡️', '💥', '🚀', '💫', '✨', '🌟', '💪'],
   hearts: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍'],
@@ -108,6 +113,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [isSaving, setIsSaving] = useState(false);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<number | null>(null);
+  const [mediaErrors, setMediaErrors] = useState<MediaValidationError[]>([]);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiMode, setAiMode] = useState<AIMode>({ type: null, prompt: '' });
   const [isGenerating, setIsGenerating] = useState(false);
@@ -187,15 +193,67 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
 
   const addMedia = (index: number, files: FileList | null) => {
     if (!files) return;
+    
+    const errors: MediaValidationError[] = [];
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_VIDEO_SIZE = 512 * 1024 * 1024; // 512MB
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime'];
+    
     Array.from(files).forEach(file => {
-      const url = URL.createObjectURL(file);
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      const newTweets = [...tweets];
-      if (newTweets[index].media.length < 4) {
-        newTweets[index].media.push({ url, type, file });
-        setTweets(newTweets);
+      const isImage = file.type.startsWith('image');
+      const isVideo = file.type.startsWith('video');
+      
+      // Check file type
+      if (isImage && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        errors.push({ file: file.name, error: 'Only JPG, PNG, WebP, GIF allowed' });
+        return;
       }
+      if (isVideo && !ALLOWED_VIDEO_TYPES.includes(file.type)) {
+        errors.push({ file: file.name, error: 'Only MP4, MOV allowed' });
+        return;
+      }
+      
+      // Check file size
+      if (isImage && file.size > MAX_IMAGE_SIZE) {
+        errors.push({ file: file.name, error: 'Image must be under 5MB' });
+        return;
+      }
+      if (isVideo && file.size > MAX_VIDEO_SIZE) {
+        errors.push({ file: file.name, error: 'Video must be under 512MB' });
+        return;
+      }
+      
+      // Check media count (X allows max 4 images OR 1 video)
+      const currentMedia = tweets[index].media;
+      const hasVideo = currentMedia.some(m => m.type === 'video');
+      const hasImage = currentMedia.some(m => m.type === 'image');
+      
+      if (isVideo && (hasVideo || hasImage)) {
+        errors.push({ file: file.name, error: "Can't mix video with images" });
+        return;
+      }
+      if (isImage && hasVideo) {
+        errors.push({ file: file.name, error: "Can't mix images with video" });
+        return;
+      }
+      if (isImage && currentMedia.length >= 4) {
+        errors.push({ file: file.name, error: 'Max 4 images allowed' });
+        return;
+      }
+      
+      // All checks passed - add media
+      const url = URL.createObjectURL(file);
+      const type = isVideo ? 'video' : 'image';
+      const newTweets = [...tweets];
+      newTweets[index].media.push({ url, type, file });
+      setTweets(newTweets);
     });
+    
+    if (errors.length > 0) {
+      setMediaErrors(errors);
+      setTimeout(() => setMediaErrors([]), 5000);
+    }
   };
 
   const removeMedia = (tweetIndex: number, mediaIndex: number) => {
@@ -422,6 +480,18 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                 <p className={`text-sm ${postStatus.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {postStatus.message}
                 </p>
+              </div>
+            )}
+
+            {/* Media Validation Errors */}
+            {mediaErrors.length > 0 && (
+              <div className="mx-6 mt-4 px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-xl space-y-1">
+                {mediaErrors.map((err, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm text-rose-400">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{err.file}: {err.error}</span>
+                  </div>
+                ))}
               </div>
             )}
 
