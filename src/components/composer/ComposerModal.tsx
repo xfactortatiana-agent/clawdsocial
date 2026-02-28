@@ -361,7 +361,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                     onClick={() => selectGeneratedContent(option)}
                     className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-violet-500 rounded-xl text-left text-slate-300 text-sm transition-colors"
                   >
-                    {aiType === 'thread' ?> (
+                    {aiType === 'thread' ? (
                       <span className="text-violet-400 font-medium">{idx + 1}/</span>
                     ) : null}
                     {option}
