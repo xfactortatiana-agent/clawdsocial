@@ -14,7 +14,9 @@ function SettingsContent() {
   const [xPfp, setXPfp] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [pendingSave, setPendingSave] = useState(false);
 
+  // Handle OAuth callback data
   useEffect(() => {
     const connected = searchParams.get("connected");
     const username = searchParams.get("username");
@@ -32,19 +34,23 @@ function SettingsContent() {
       setXUsername(username);
       setXName(name || username);
       setXPfp(pfp || "");
-      
-      // Save to database
-      saveToDatabase(username, name || username, pfp || "");
+      setPendingSave(true);
     }
   }, [searchParams]);
 
-  const saveToDatabase = async (username: string, name: string, pfp: string) => {
-    if (!user) {
-      console.log('No user yet, waiting...');
-      return;
+  // Save when user is loaded and we have pending data
+  useEffect(() => {
+    if (isLoaded && user && pendingSave && xUsername) {
+      saveToDatabase(xUsername, xName, xPfp);
     }
+  }, [isLoaded, user, pendingSave]);
+
+  const saveToDatabase = async (username: string, name: string, pfp: string) => {
+    if (!user) return;
     
     setIsSaving(true);
+    setPendingSave(false);
+    
     try {
       const response = await fetch('/api/auth/x/save', {
         method: 'POST',
@@ -59,9 +65,7 @@ function SettingsContent() {
       
       const data = await response.json();
       
-      if (response.ok) {
-        console.log('Saved to database:', data);
-      } else {
+      if (!response.ok) {
         console.error('Failed to save:', data);
         setError(data.error || 'Failed to save');
       }
@@ -115,6 +119,7 @@ function SettingsContent() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm text-emerald-400">Connected as @{xUsername}</p>
                     {isSaving && <span className="text-xs text-slate-500">Saving...</span>}
+                    {pendingSave && <span className="text-xs text-amber-500">Waiting for auth...</span>}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-500">Not connected</p>
