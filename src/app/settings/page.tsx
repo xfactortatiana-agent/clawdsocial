@@ -1,150 +1,40 @@
-"use client";
-
-import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/db";
 import Link from "next/link";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
+import { UserButton } from "@clerk/nextjs";
 
-function SettingsContent() {
-  const searchParams = useSearchParams();
-  const { user, isLoaded } = useUser();
-  const [xConnected, setXConnected] = useState(false);
-  const [xUsername, setXUsername] = useState("");
-  const [xName, setXName] = useState("");
-  const [xPfp, setXPfp] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [pendingSave, setPendingSave] = useState(false);
+export default async function SettingsPage() {
+  const { userId } = auth();
 
-  // Handle OAuth callback data
-  useEffect(() => {
-    const connected = searchParams.get("connected");
-    const username = searchParams.get("username");
-    const name = searchParams.get("name");
-    const pfp = searchParams.get("pfp");
-    const errorParam = searchParams.get("error");
-    
-    if (errorParam) {
-      setError(errorParam);
-      return;
-    }
-    
-    if (connected === "x" && username) {
-      setXConnected(true);
-      setXUsername(username);
-      setXName(name || username);
-      setXPfp(pfp || "");
-      setPendingSave(true);
-    }
-  }, [searchParams]);
-
-  // Save when user is loaded and we have pending data
-  useEffect(() => {
-    if (isLoaded && user && pendingSave && xUsername) {
-      saveToDatabase(xUsername, xName, xPfp);
-    }
-  }, [isLoaded, user, pendingSave]);
-
-  const saveToDatabase = async (username: string, name: string, pfp: string) => {
-    if (!user) return;
-    
-    setIsSaving(true);
-    setPendingSave(false);
-    
-    try {
-      const response = await fetch('/api/auth/x/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          username, 
-          name, 
-          pfp,
-          clerkId: user.id 
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error('Failed to save:', data);
-        setError(data.error || 'Failed to save');
-      }
-    } catch (err) {
-      console.error('Error:', err);
-      setError('Network error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleXConnect = () => {
-    window.location.href = "/api/auth/x";
-  };
-
-  if (!isLoaded) {
-    return <div className="text-slate-400">Loading...</div>;
+  if (!userId) {
+    redirect("/sign-in");
   }
 
-  return (
-    <>
-      {error && (
-        <div className="mb-4 p-4 bg-rose-600/20 border border-rose-600/50 rounded-xl text-rose-400">
-          Error: {error}
-        </div>
-      )}
-      
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-slate-800">
-          <h2 className="font-semibold text-white">Connected Accounts</h2>
-          <p className="text-sm text-slate-400">Link your social media accounts</p>
-        </div>
+  // Get user from database with connected accounts
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    include: {
+      workspaces: {
+        include: {
+          workspace: {
+            include: {
+              accounts: true
+            }
+          }
+        }
+      }
+    }
+  });
 
-        <div className="p-6">
-          <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-4">
-              {xPfp ? (
-                <img 
-                  src={xPfp} 
-                  alt={xName}
-                  className="w-12 h-12 rounded-xl object-cover"
-                />
-              ) : (
-                <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
-                  <span className="text-2xl">𝕏</span>
-                </div>
-              )}
-              <div>
-                <p className="font-medium text-white">X (Twitter)</p>
-                {xConnected ? (
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm text-emerald-400">Connected as @{xUsername}</p>
-                    {isSaving && <span className="text-xs text-slate-500">Saving...</span>}
-                    {pendingSave && <span className="text-xs text-amber-500">Waiting for auth...</span>}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">Not connected</p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={handleXConnect}
-              disabled={xConnected}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                xConnected
-                  ? "bg-emerald-600/20 text-emerald-400 cursor-default"
-                  : "bg-violet-600 text-white hover:bg-violet-700"
-              }`}
-            >
-              {xConnected ? "Connected ✓" : "Connect"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+  // Get connected X accounts
+  const xAccounts = user?.workspaces.flatMap(w => 
+    w.workspace.accounts.filter(a => a.platform === 'X' && a.isActive)
+  ) || [];
 
-export default function SettingsPage() {
+  const hasXConnected = xAccounts.length > 0;
+  const xAccount = xAccounts[0];
+
   return (
     <div className="min-h-screen bg-slate-950">
       <header className="bg-slate-900/50 border-b border-slate-800">
@@ -177,9 +67,55 @@ export default function SettingsPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-        <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
-          <SettingsContent />
-        </Suspense>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-slate-800">
+            <h2 className="font-semibold text-white">Connected Accounts</h2>
+            <p className="text-sm text-slate-400">Link your social media accounts</p>
+          </div>
+
+          <div className="p-6">
+            {hasXConnected ? (
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-center gap-4">
+                  {xAccount?.profileImageUrl ? (
+                    <img 
+                      src={xAccount.profileImageUrl} 
+                      alt={xAccount.accountName}
+                      className="w-12 h-12 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
+                      <span className="text-2xl">𝕏</span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-white">X (Twitter)</p>
+                    <p className="text-sm text-emerald-400">Connected as @{xAccount?.accountHandle}</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm">Connected ✓</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
+                    <span className="text-2xl">𝕏</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-white">X (Twitter)</p>
+                    <p className="text-sm text-slate-500">Not connected</p>
+                  </div>
+                </div>
+                <a
+                  href="/api/auth/x"
+                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
+                >
+                  Connect
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
       </main>
     </div>
   );

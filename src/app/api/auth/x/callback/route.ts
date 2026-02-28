@@ -11,11 +11,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
-  const state = searchParams.get('state')
 
   console.log('=== X OAUTH CALLBACK ===')
   console.log('Code:', code ? 'present' : 'missing')
-  console.log('State:', state)
   console.log('Error:', error)
 
   if (error) {
@@ -29,7 +27,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Step 1: Exchange code for access token
+    // Exchange code for access token
     console.log('Exchanging code for token...')
     
     const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
@@ -53,11 +51,11 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) {
       console.error('Token error:', tokenData)
       return NextResponse.redirect(
-        new URL(`/settings?error=token_exchange&details=${encodeURIComponent(JSON.stringify(tokenData))}`, request.url)
+        new URL(`/settings?error=token_exchange`, request.url)
       )
     }
 
-    // Step 2: Get user info from X
+    // Get user info from X
     console.log('Getting user info from X...')
     
     const userResponse = await fetch('https://api.twitter.com/2/users/me?user.fields=profile_image_url,username,name', {
@@ -82,12 +80,11 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
-    // Step 3: Get user from cookie or create temp user
-    // For now, we'll use a temporary approach - store in cookie and let client save
+    // Redirect back with success - data will be saved by client
     console.log('Success! Redirecting with user data...')
 
     return NextResponse.redirect(
-      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}&name=${encodeURIComponent(xUser.name || '')}&pfp=${encodeURIComponent(xUser.profile_image_url || '')}&token=${encodeURIComponent(tokenData.access_token)}`, request.url)
+      new URL(`/settings?connected=x&username=${encodeURIComponent(xUser.username)}&name=${encodeURIComponent(xUser.name || '')}&pfp=${encodeURIComponent(xUser.profile_image_url || '')}`, request.url)
     )
   } catch (err) {
     console.error('OAuth exception:', err)
