@@ -113,7 +113,7 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   
-  const textareaRefs = useRef<(Map<string, HTMLTextAreaElement>>(new Map());
+  const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
 
   const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
   const hasXConnected = xAccounts.length > 0;
