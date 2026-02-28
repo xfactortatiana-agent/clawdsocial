@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { UserButton, useUser, useSignIn } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs";
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
-  const { signIn } = useSignIn();
   const [xConnected, setXConnected] = useState(false);
   const [xUsername, setXUsername] = useState("");
   const [xPfp, setXPfp] = useState("");
@@ -49,18 +48,20 @@ export default function SettingsPage() {
     }
   };
 
-  const handleConnectX = async () => {
-    if (!signIn) return;
-    
-    try {
-      // Use Clerk's authenticateWithRedirect
-      await signIn.authenticateWithRedirect({
+  const handleConnectX = () => {
+    // Open Clerk's user profile with connected accounts tab
+    if (user) {
+      // @ts-ignore - createExternalAccount exists but types may not show it
+      user.createExternalAccount({
         strategy: 'oauth_x',
-        redirectUrl: '/settings',
-        redirectUrlComplete: '/settings'
+        redirect_url: window.location.href,
+      }).then((result: any) => {
+        if (result.verification?.externalVerificationRedirectURL) {
+          window.location.href = result.verification.externalVerificationRedirectURL;
+        }
+      }).catch((err: any) => {
+        console.error('Failed to start X connection:', err);
       });
-    } catch (err) {
-      console.error('Failed to connect X:', err);
     }
   };
 
