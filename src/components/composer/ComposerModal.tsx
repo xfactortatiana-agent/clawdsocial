@@ -1,28 +1,36 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { format } from "date-fns";
+import { format, addMinutes, isBefore, startOfDay, addHours } from "date-fns";
 import { 
   X, 
   Sparkles, 
   Image as ImageIcon, 
   Calendar, 
   Clock, 
-  Check, 
   Loader2,
-  Link2,
   Wand2,
-  Smile,
   Bold,
   Italic,
-  List,
   Hash,
   AtSign,
-  Eye,
-  Trash2,
   Plus,
+  Trash2,
+  GripVertical,
+  ChevronDown,
+  ChevronUp,
   Send,
-  Type
+  Save,
+  Zap,
+  MoreHorizontal,
+  Check,
+  AlertCircle,
+  Type,
+  MessageSquarePlus,
+  Wand,
+  Flame,
+  Scissors,
+  ListOrdered
 } from "lucide-react";
 
 interface ComposerModalProps {
@@ -32,27 +40,16 @@ interface ComposerModalProps {
   connectedAccounts?: any[];
 }
 
-const allPlatforms = [
-  { id: "x", name: "X", icon: "𝕏", color: "#000000" },
-  { id: "instagram", name: "Instagram", icon: "📷", color: "#E4405F" },
-  { id: "linkedin", name: "LinkedIn", icon: "💼", color: "#0A66C2" },
-  { id: "tiktok", name: "TikTok", icon: "🎵", color: "#000000" },
-];
+interface Tweet {
+  id: string;
+  content: string;
+  media: { url: string; type: 'image' | 'video'; file?: File }[];
+}
 
-const tones = [
-  { id: 'match_voice', name: 'Match My Voice', description: 'Analyzes your past posts' },
-  { id: 'professional', name: 'Professional', description: 'Authoritative & business-focused' },
-  { id: 'casual', name: 'Casual', description: 'Friendly & conversational' },
-  { id: 'witty', name: 'Witty', description: 'Clever & sharp' },
-  { id: 'educational', name: 'Educational', description: 'Informative & teaching' },
-];
-
-const lengths = [
-  { id: 'short', name: 'Short', chars: '50-100 chars' },
-  { id: 'medium', name: 'Medium', chars: '100-200 chars' },
-  { id: 'long', name: 'Long', chars: '200-280 chars' },
-  { id: 'thread', name: 'Thread', chars: 'Multiple tweets' },
-];
+interface AIMode {
+  type: 'generate' | 'improve' | 'thread' | 'hashtags' | null;
+  prompt: string;
+}
 
 const emojis = {
   fire: ['🔥', '⚡️', '💥', '🚀', '💫', '✨', '🌟', '💪'],
@@ -62,249 +59,231 @@ const emojis = {
   gestures: ['👍', '👏', '🙌', '✌️', '🤝', '👆', '👇', '💯']
 };
 
-// Parse content with formatting to React elements
+const bestTimes = [
+  { label: 'Morning', time: '09:00', desc: '9:00 AM — High engagement' },
+  { label: 'Lunch', time: '12:00', desc: '12:00 PM — Peak activity' },
+  { label: 'Evening', time: '18:00', desc: '6:00 PM — Commute scroll' },
+  { label: 'Night', time: '21:00', desc: '9:00 PM — Relaxation time' },
+];
+
+// Parse content with formatting
 function renderFormattedText(text: string): React.ReactNode {
   if (!text) return null;
-  
-  // Split by patterns: **bold**, *italic*, `code`, #hashtag, @mention, https://links
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|#[\w]+|@[\w]+|https?:\/\/[^\s]+)/g);
   
   return parts.map((part, i) => {
-    // Bold: **text**
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i} className="font-bold text-white">{part.slice(2, -2)}</strong>;
     }
-    // Italic: *text*
     if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
       return <em key={i} className="italic text-slate-200">{part.slice(1, -1)}</em>;
     }
-    // Code: `text`
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={i} className="px-1.5 py-0.5 bg-slate-700 rounded text-sm font-mono text-cyan-400">{part.slice(1, -1)}</code>;
+      return <code key={i} className="px-1 py-0.5 bg-slate-700 rounded text-xs font-mono text-cyan-400">{part.slice(1, -1)}</code>;
     }
-    // Hashtag: #word
     if (part.startsWith('#') && part.length > 1) {
-      return <span key={i} className="text-violet-400 hover:underline cursor-pointer">{part}</span>;
+      return <span key={i} className="text-violet-400">{part}</span>;
     }
-    // Mention: @word
     if (part.startsWith('@') && part.length > 1) {
-      return <span key={i} className="text-blue-400 hover:underline cursor-pointer">{part}</span>;
+      return <span key={i} className="text-blue-400">{part}</span>;
     }
-    // Link: https://
     if (part.startsWith('http')) {
-      return (
-        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-          {part.length > 30 ? part.slice(0, 30) + '...' : part}
-        </a>
-      );
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{part.length > 25 ? part.slice(0, 25) + '...' : part}</a>;
     }
     return <span key={i}>{part}</span>;
   });
 }
 
 export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [] }: ComposerModalProps) {
-  const [content, setContent] = useState("");
-  const [platform, setPlatform] = useState("x");
+  const [tweets, setTweets] = useState<Tweet[]>([{ id: '1', content: '', media: [] }]);
+  const [activeTweetIndex, setActiveTweetIndex] = useState(0);
+  const [isThread, setIsThread] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(
     initialDate ? format(initialDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
   );
-  const [scheduledTime, setScheduledTime] = useState("10:00");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState("12:00");
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
-  const [charCount, setCharCount] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [showPreview, setShowPreview] = useState(true);
-  const [mediaFiles, setMediaFiles] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState(0);
-  const [activeFormat, setActiveFormat] = useState<'bold' | 'italic' | null>(null);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [aiMode, setAiMode] = useState<AIMode>({ type: null, prompt: '' });
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   
-  // AI Generation states
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiTone, setAiTone] = useState("match_voice");
-  const [aiLength, setAiLength] = useState("medium");
-  const [aiType, setAiType] = useState<'single' | 'thread'>('single');
-  const [generatedOptions, setGeneratedOptions] = useState<string[]>([]);
-  const [urlInput, setUrlInput] = useState("");
-  const [activeTab, setActiveTab] = useState<'prompt' | 'url'>('prompt');
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRefs = useRef<(Map<string, HTMLTextAreaElement>>(new Map());
 
   const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
   const hasXConnected = xAccounts.length > 0;
 
-  const availablePlatforms = allPlatforms.map(p => ({
-    ...p,
-    connected: p.id === 'x' ? hasXConnected : false,
-    accounts: p.id === 'x' ? xAccounts : []
-  }));
-
-  useEffect(() => {
-    if (hasXConnected && platform !== 'x') {
-      setPlatform('x');
-    }
-  }, [hasXConnected, platform]);
-
   useEffect(() => {
     if (!isOpen) {
-      setPostStatus(null);
-      setContent("");
-      setCharCount(0);
-      setShowAIGenerator(false);
-      setGeneratedOptions([]);
-      setMediaFiles([]);
+      resetComposer();
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    setContent(text);
-    setCharCount(text.length);
-    setCursorPosition(e.target.selectionStart);
+  const resetComposer = () => {
+    setTweets([{ id: '1', content: '', media: [] }]);
+    setActiveTweetIndex(0);
+    setIsThread(false);
+    setPostStatus(null);
+    setShowAIPanel(false);
+    setAiSuggestions([]);
+    setScheduledDate(format(new Date(), "yyyy-MM-dd"));
+    setScheduledTime("12:00");
   };
 
-  const insertText = (before: string, after: string = '') => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-    
-    const newText = content.substring(0, start) + before + selectedText + after + content.substring(end);
-    setContent(newText);
-    setCharCount(newText.length);
-    
-    // Focus and set cursor position after the inserted text
+  const addTweet = () => {
+    const newId = Date.now().toString();
+    setTweets([...tweets, { id: newId, content: '', media: [] }]);
+    setIsThread(true);
     setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + before.length + selectedText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-      setCursorPosition(newCursorPos);
-    }, 0);
-    
-    setShowEmojiPicker(false);
+      const newIndex = tweets.length;
+      setActiveTweetIndex(newIndex);
+      textareaRefs.current.get(newId)?.focus();
+    }, 50);
   };
 
-  const toggleBold = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-    
-    // Check if already bold
-    const beforeSelection = content.substring(Math.max(0, start - 2), start);
-    const afterSelection = content.substring(end, Math.min(content.length, end + 2));
-    
-    if (beforeSelection === '**' && afterSelection === '**') {
-      // Remove bold
-      const newText = content.substring(0, start - 2) + selectedText + content.substring(end + 2);
-      setContent(newText);
-    } else {
-      // Add bold
-      insertText('**', '**');
+  const removeTweet = (index: number) => {
+    if (tweets.length === 1) return;
+    const newTweets = tweets.filter((_, i) => i !== index);
+    setTweets(newTweets);
+    if (newTweets.length === 1) setIsThread(false);
+    if (activeTweetIndex >= newTweets.length) {
+      setActiveTweetIndex(newTweets.length - 1);
     }
   };
 
-  const toggleItalic = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-    
-    // Check if already italic (but not bold)
-    const beforeSelection = content.substring(Math.max(0, start - 1), start);
-    const afterSelection = content.substring(end, Math.min(content.length, end + 1));
-    
-    if (beforeSelection === '*' && afterSelection === '*' && 
-        content.substring(Math.max(0, start - 2), start) !== '**') {
-      // Remove italic
-      const newText = content.substring(0, start - 1) + selectedText + content.substring(end + 1);
-      setContent(newText);
-    } else {
-      // Add italic
-      insertText('*', '*');
-    }
+  const moveTweet = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= tweets.length) return;
+    const newTweets = [...tweets];
+    const [moved] = newTweets.splice(fromIndex, 1);
+    newTweets.splice(toIndex, 0, moved);
+    setTweets(newTweets);
+    setActiveTweetIndex(toIndex);
   };
 
-  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const updateTweetContent = (index: number, content: string) => {
+    const newTweets = [...tweets];
+    newTweets[index].content = content;
+    setTweets(newTweets);
+  };
+
+  const addMedia = (index: number, files: FileList | null) => {
     if (!files) return;
-    
     Array.from(files).forEach(file => {
       const url = URL.createObjectURL(file);
       const type = file.type.startsWith('video') ? 'video' : 'image';
-      setMediaFiles(prev => [...prev, { url, type }]);
+      const newTweets = [...tweets];
+      if (newTweets[index].media.length < 4) {
+        newTweets[index].media.push({ url, type, file });
+        setTweets(newTweets);
+      }
     });
   };
 
-  const removeMedia = (index: number) => {
-    setMediaFiles(prev => prev.filter((_, i) => i !== index));
+  const removeMedia = (tweetIndex: number, mediaIndex: number) => {
+    const newTweets = [...tweets];
+    newTweets[tweetIndex].media.splice(mediaIndex, 1);
+    setTweets(newTweets);
   };
 
-  const handleGenerateAI = async () => {
-    if (!aiPrompt.trim() && activeTab === 'prompt') return;
-    if (!urlInput.trim() && activeTab === 'url') return;
+  const insertText = (index: number, before: string, after: string = '') => {
+    const textarea = textareaRefs.current.get(tweets[index].id);
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const content = tweets[index].content;
+    const selectedText = content.substring(start, end);
+    
+    const newContent = content.substring(0, start) + before + selectedText + after + content.substring(end);
+    updateTweetContent(index, newContent);
+    
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + before.length + selectedText.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  const toggleFormat = (index: number, format: 'bold' | 'italic') => {
+    const textarea = textareaRefs.current.get(tweets[index].id);
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const content = tweets[index].content;
+    const selectedText = content.substring(start, end);
+    
+    const marker = format === 'bold' ? '**' : '*';
+    const beforeSelection = content.substring(Math.max(0, start - marker.length), start);
+    const afterSelection = content.substring(end, Math.min(content.length, end + marker.length));
+    
+    // Check if already formatted
+    const isFormatted = beforeSelection === marker && afterSelection === marker && 
+      !(format === 'italic' && content.substring(Math.max(0, start - 2), start) === '**');
+    
+    if (isFormatted) {
+      // Remove formatting
+      const newContent = content.substring(0, start - marker.length) + selectedText + content.substring(end + marker.length);
+      updateTweetContent(index, newContent);
+    } else {
+      // Add formatting
+      insertText(index, marker, marker);
+    }
+  };
+
+  const getCharCount = (content: string) => content.length;
+  const getCharPercentage = (content: string) => (getCharCount(content) / 280) * 100;
+
+  const handleAIAction = async () => {
+    if (!aiMode.type || !aiMode.prompt.trim()) return;
     
     setIsGenerating(true);
-    setGeneratedOptions([]);
+    setAiSuggestions([]);
 
     try {
-      let res;
+      const currentContent = tweets[activeTweetIndex].content;
       
-      if (activeTab === 'url') {
-        res = await fetch('/api/ai/generate', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: urlInput, tone: aiTone })
-        });
-      } else {
-        res = await fetch('/api/ai/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: aiPrompt,
-            tone: aiTone,
-            length: aiLength,
-            type: aiType
-          })
-        });
-      }
+      const res = await fetch('/api/ai/composer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: aiMode.type,
+          prompt: aiMode.prompt,
+          currentContent,
+          isThread
+        })
+      });
 
       const data = await res.json();
 
       if (res.ok) {
-        if (data.result.type === 'thread' && data.result.tweets) {
-          setGeneratedOptions(data.result.tweets);
-        } else {
-          setGeneratedOptions([data.result.content]);
+        if (data.suggestions) {
+          setAiSuggestions(data.suggestions);
+        } else if (data.content) {
+          updateTweetContent(activeTweetIndex, data.content);
+          setShowAIPanel(false);
         }
-      } else {
-        setPostStatus({ type: 'error', message: data.error || 'AI generation failed' });
       }
     } catch (err) {
-      setPostStatus({ type: 'error', message: 'Network error during AI generation' });
+      console.error('AI generation failed:', err);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const selectGeneratedContent = (text: string) => {
-    setContent(text);
-    setCharCount(text.length);
-    setShowAIGenerator(false);
-    setGeneratedOptions([]);
+  const applyAISuggestion = (suggestion: string) => {
+    updateTweetContent(activeTweetIndex, suggestion);
+    setAiSuggestions([]);
+    setAiMode({ type: null, prompt: '' });
   };
 
-  const handlePost = async (publishNow: boolean = false) => {
-    if (!content.trim() || !hasXConnected) return;
+  const handlePublish = async (publishNow: boolean = false) => {
+    if (!hasXConnected || tweets.every(t => !t.content.trim())) return;
     
     setIsPosting(true);
     setPostStatus(null);
@@ -314,14 +293,22 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
         ? null 
         : new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
 
+      // For threads, create multiple posts
+      const posts = tweets.map((tweet, index) => ({
+        content: tweet.content,
+        media: tweet.media.map(m => m.file),
+        threadPosition: isThread ? index : null,
+        threadId: isThread ? tweets[0].id : null
+      })).filter(p => p.content.trim());
+
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: content.trim(),
-          platform: 'X',
+          posts,
+          isThread,
           scheduledFor,
-          mediaUrls: mediaFiles.map(m => m.url)
+          platform: 'X'
         })
       });
 
@@ -330,11 +317,13 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
       if (res.ok) {
         setPostStatus({
           type: 'success',
-          message: publishNow ? 'Post published!' : 'Post scheduled!'
+          message: publishNow 
+            ? isThread ? 'Thread published!' : 'Post published!' 
+            : isThread ? 'Thread scheduled!' : 'Post scheduled!'
         });
         setTimeout(() => onClose(), 1500);
       } else {
-        setPostStatus({ type: 'error', message: data.error || 'Failed to post' });
+        setPostStatus({ type: 'error', message: data.error || 'Failed to publish' });
       }
     } catch (err) {
       setPostStatus({ type: 'error', message: 'Network error' });
@@ -343,229 +332,80 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
     }
   };
 
-  const charLimit = platform === "x" ? 280 : 2200;
-  const charPercentage = (charCount / charLimit) * 100;
-  const charColor = charPercentage > 90 ? 'text-rose-500' : charPercentage > 75 ? 'text-amber-400' : 'text-emerald-400';
+  const saveDraft = async () => {
+    setIsSaving(true);
+    try {
+      await fetch('/api/posts/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tweets, isThread })
+      });
+      setPostStatus({ type: 'success', message: 'Draft saved!' });
+    } catch (err) {
+      setPostStatus({ type: 'error', message: 'Failed to save draft' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-  // AI Generator View
-  if (showAIGenerator) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAIGenerator(false)} />
-        <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-xl flex items-center justify-center">
-                <Wand2 className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">AI Content Generator</h2>
-                <p className="text-sm text-slate-400">Trained on your voice</p>
-              </div>
-            </div>
-            <button onClick={() => setShowAIGenerator(false)} className="p-2 hover:bg-slate-800 rounded-lg">
-              <X className="w-5 h-5 text-slate-400" />
-            </button>
-          </div>
+  if (!isOpen) return null;
 
-          <div className="p-6 space-y-6">
-            {/* Tabs */}
-            <div className="flex p-1 bg-slate-800 rounded-xl">
-              {['prompt', 'url'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab as any)}
-                  className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === tab 
-                      ? 'bg-violet-600 text-white shadow-lg' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {tab === 'prompt' ? 'From Prompt' : 'From URL'}
-                </button>
-              ))}
-            </div>
-
-            {activeTab === 'prompt' ? (
-              <>
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-slate-300">What would you like to post about?</label>
-                  <textarea
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="e.g., Launching our new AI feature that helps creators write better content..."
-                    className="w-full min-h-[100px] px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Tone</label>
-                    <select
-                      value={aiTone}
-                      onChange={(e) => setAiTone(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                    >
-                      {tones.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Length</label>
-                    <select
-                      value={aiLength}
-                      onChange={(e) => setAiLength(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                    >
-                      {lengths.map(l => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-300">Format</label>
-                  <div className="flex gap-3">
-                    {[
-                      { id: 'single', label: 'Single Post', icon: Send },
-                      { id: 'thread', label: 'Thread', icon: List }
-                    ].map((fmt) => (
-                      <button
-                        key={fmt.id}
-                        onClick={() => setAiType(fmt.id as any)}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border transition-all ${
-                          aiType === fmt.id
-                            ? 'bg-violet-600/20 border-violet-500 text-violet-300'
-                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                        }`}
-                      >
-                        <fmt.icon className="w-4 h-4" />
-                        {fmt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <label className="text-sm font-medium text-slate-300">Paste URL to summarize</label>
-                <div className="relative">
-                  <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="url"
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="https://example.com/article"
-                    className="w-full px-4 py-3 pl-11 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                  />
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={handleGenerateAI}
-              disabled={isGenerating || (activeTab === 'prompt' ? !aiPrompt.trim() : !urlInput.trim())}
-              className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Generate Content
-                </>
-              )}
-            </button>
-
-            {/* Generated Options */}
-            {generatedOptions.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-slate-800">
-                <p className="text-sm font-medium text-slate-300">Choose an option:</p>
-                {generatedOptions.map((option, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => selectGeneratedContent(option)}
-                    className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-violet-500 hover:bg-slate-800 rounded-xl text-left transition-all group"
-                  >
-                    <div className="flex items-start gap-3">
-                      {aiType === 'thread' && (
-                        <span className="flex-shrink-0 w-6 h-6 bg-violet-600/20 text-violet-400 rounded-full flex items-center justify-center text-xs font-medium">
-                          {idx + 1}
-                        </span>
-                      )}
-                      <p className="text-slate-300 text-sm leading-relaxed">{option}</p>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Check className="w-3 h-3" />
-                      Click to use this
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Main Composer View
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-sm" onClick={onClose} />
+      
+      <div className="relative w-full max-w-5xl h-[90vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
           <div className="flex items-center gap-4">
-            <h2 className="text-lg font-semibold text-white">Create Post</h2>
+            <h2 className="text-lg font-semibold text-white">{isThread ? 'Thread Composer' : 'Compose Post'}</h2>
             
-            {/* Platform Selector */}
-            <div className="flex items-center gap-2">
-              {availablePlatforms.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => p.connected && setPlatform(p.id)}
-                  disabled={!p.connected}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    platform === p.id
-                      ? "bg-violet-600 text-white"
-                      : p.connected
-                      ? "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                      : "bg-slate-800/50 text-slate-600 cursor-not-allowed"
-                  }`}
-                >
-                  <span>{p.icon}</span>
-                  <span className="hidden sm:inline">{p.name}</span>
-                </button>
-              ))}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-lg">
+              <span className="text-sm text-slate-400">{tweets.length} {tweets.length === 1 ? 'tweet' : 'tweets'}</span>
+              <button
+                onClick={() => {
+                  if (!isThread) {
+                    setIsThread(true);
+                    if (tweets.length === 1) addTweet();
+                  }
+                }}
+                className={`text-xs px-2 py-1 rounded transition-colors ${
+                  isThread ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Thread
+              </button>
             </div>
           </div>
           
-          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAIPanel(!showAIPanel)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                showAIPanel ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Wand2 className="w-4 h-4" />
+              <span className="hidden sm:inline text-sm">AI</span>
+            </button>
+            
+            <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg">
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Left Side - Editor */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Status Message */}
+          {/* Main Editor */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+            {/* Status */}
             {postStatus && (
               <div className={`mx-6 mt-4 px-4 py-3 rounded-xl ${
                 postStatus.type === 'success' 
                   ? 'bg-emerald-500/10 border border-emerald-500/20' 
-                  : 'bg-red-500/10 border border-red-500/20'
+                  : 'bg-rose-500/10 border border-rose-500/20'
               }`}>
-                <p className={`text-sm ${
-                  postStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'
-                }`}>
+                <p className={`text-sm ${postStatus.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {postStatus.message}
                 </p>
               </div>
@@ -575,258 +415,349 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
             {hasXConnected && (
               <div className="mx-6 mt-4 flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
                 {xAccounts[0]?.profileImageUrl ? (
-                  <img 
-                    src={xAccounts[0].profileImageUrl} 
-                    alt={xAccounts[0].accountHandle}
-                    className="w-8 h-8 rounded-full object-cover" 
-                  />
+                  <img src={xAccounts[0].profileImageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
                 ) : (
                   <div className="w-8 h-8 bg-emerald-600/20 rounded-full flex items-center justify-center">
                     <Check className="w-4 h-4 text-emerald-400" />
                   </div>
                 )}
-                <span className="text-sm text-emerald-400">Posting as @{xAccounts[0]?.accountHandle}</span>
+                <span className="text-sm text-emerald-400">@{xAccounts[0]?.accountHandle}</span>
               </div>
             )}
 
-            {/* Editor Toolbar */}
-            <div className="mx-6 mt-4 flex items-center gap-1 p-1 bg-slate-800 rounded-xl">
-              <button 
-                onClick={toggleBold}
-                className={`p-2 rounded-lg transition-colors ${
-                  content.includes('**') ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                }`}
-                title="Bold (Ctrl+B)"
-              >
-                <Bold className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={toggleItalic}
-                className={`p-2 rounded-lg transition-colors ${
-                  content.match(/(?<!\*)\*[^*]+\*(?!\*)/) ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                }`}
-                title="Italic (Ctrl+I)"
-              >
-                <Italic className="w-4 h-4" />
-              </button>
-              <div className="w-px h-6 bg-slate-700 mx-1" />
-              <button 
-                onClick={() => insertText('@')}
-                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
-                title="Mention"
-              >
-                <AtSign className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={() => insertText('#')}
-                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
-                title="Hashtag"
-              >
-                <Hash className="w-4 h-4" />
-              </button>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
-                  title="Emoji"
-                >
-                  <Smile className="w-4 h-4" />
-                </button>
-                
-                {showEmojiPicker && (
-                  <div className="absolute top-full left-0 mt-2 p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-10 w-72">
-                    <div className="space-y-3">
-                      {Object.entries(emojis).map(([category, emojiList]) => (
-                        <div key={category}>
-                          <p className="text-xs text-slate-500 uppercase mb-2">{category}</p>
-                          <div className="grid grid-cols-8 gap-1">
-                            {emojiList.map((emoji) => (
-                              <button
-                                key={emoji}
-                                onClick={() => insertText(emoji, '')}
-                                className="w-7 h-7 hover:bg-slate-700 rounded-lg flex items-center justify-center text-lg transition-colors"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex-1" />
-              <button
-                onClick={() => setShowAIGenerator(true)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                <Wand2 className="w-3.5 h-3.5" />
-                AI Generate
-              </button>
-            </div>
-
-            {/* Text Area */}
-            <div className="mx-6 mt-4 flex-1 min-h-[200px]">
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={handleContentChange}
-                onKeyUp={(e) => setCursorPosition(e.currentTarget.selectionStart)}
-                onClick={(e) => setCursorPosition(e.currentTarget.selectionStart)}
-                placeholder="What's on your mind? Use **bold** or *italic*"
-                disabled={!hasXConnected || isPosting}
-                className="w-full h-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 disabled:opacity-50 text-lg leading-relaxed font-mono"
-              />
-            </div>
-
-            {/* Media Preview */}
-            {mediaFiles.length > 0 && (
-              <div className="mx-6 mt-4 flex gap-2 overflow-x-auto pb-2">
-                {mediaFiles.map((media, idx) => (
-                  <div key={idx} className="relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden group">
-                    {media.type === 'image' ? (
-                      <img src={media.url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <video src={media.url} className="w-full h-full object-cover" />
-                    )}
-                    
-                    <button
-                      onClick={() => removeMedia(idx)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="w-3 h-3 text-white" />
-                    </button>
-                  </div>
-                ))}
-                
-                <label className="flex-shrink-0 w-24 h-24 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-500 hover:bg-slate-800/50 transition-colors">
-                  <Plus className="w-6 h-6 text-slate-500" />
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={handleMediaUpload}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            )}
-
-            {/* Bottom Bar */}
-            <div className="mx-6 my-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg cursor-pointer transition-colors">
-                  <ImageIcon className="w-4 h-4 text-slate-400" />
-                  <span className="text-sm text-slate-400">Media</span>
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={handleMediaUpload}
-                    className="hidden"
-                  />
-                </label>
-                
-                <button 
-                  onClick={() => setShowPreview(!showPreview)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                    showPreview ? 'bg-violet-600/20 text-violet-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+            {/* Tweets */}
+            <div className="flex-1 p-6 space-y-4">
+              {tweets.map((tweet, index) => (
+                <div
+                  key={tweet.id}
+                  className={`relative bg-slate-800/50 border rounded-xl transition-all ${
+                    activeTweetIndex === index 
+                      ? 'border-violet-500/50 ring-1 ring-violet-500/20' 
+                      : 'border-slate-700 hover:border-slate-600'
                   }`}
+                  onClick={() => setActiveTweetIndex(index)}
                 >
-                  <Eye className="w-4 h-4" />
-                  <span className="text-sm">Preview</span>
-                </button>
-              </div>
+                  {/* Thread connector */}
+                  {isThread && index < tweets.length - 1 && (
+                    <div className="absolute left-6 bottom-0 translate-y-full w-0.5 h-4 bg-slate-700" />
+                  )}
 
-              {/* Character Counter */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all ${
-                        charPercentage > 90 ? 'bg-rose-500' : charPercentage > 75 ? 'bg-amber-400' : 'bg-emerald-400'
-                      }`}
-                      style={{ width: `${Math.min(charPercentage, 100)}%` }}
+                  <div className="p-4">
+                    {/* Tweet Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        {isThread && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); moveTweet(index, index - 1); }}
+                              disabled={index === 0}
+                              className="p-1 hover:bg-slate-700 rounded disabled:opacity-30"
+                            >
+                              <ChevronUp className="w-4 h-4 text-slate-400" />
+                            </button>
+                            <span className="text-xs text-slate-500 font-mono">{index + 1}/{tweets.length}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); moveTweet(index, index + 1); }}
+                              disabled={index === tweets.length - 1}
+                              className="p-1 hover:bg-slate-700 rounded disabled:opacity-30"
+                            >
+                              <ChevronDown className="w-4 h-4 text-slate-400" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Char counter */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all ${
+                                getCharPercentage(tweet.content) > 100 ? 'bg-rose-500' :
+                                getCharPercentage(tweet.content) > 90 ? 'bg-amber-400' : 'bg-emerald-400'
+                              }`}
+                              style={{ width: `${Math.min(getCharPercentage(tweet.content), 100)}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-medium ${
+                            getCharCount(tweet.content) > 280 ? 'text-rose-400' :
+                            getCharCount(tweet.content) > 250 ? 'text-amber-400' : 'text-slate-400'
+                          }`}>
+                            {getCharCount(tweet.content)}/280
+                          </span>
+                        </div>
+
+                        {tweets.length > 1 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeTweet(index); }}
+                            className="p-1.5 hover:bg-rose-500/20 hover:text-rose-400 rounded-lg text-slate-500 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Editor Toolbar */}
+                    <div className="flex items-center gap-1 mb-3 p-1 bg-slate-900/50 rounded-lg">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFormat(index, 'bold'); }}
+                        className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
+                        title="Bold"
+                      >
+                        <Bold className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFormat(index, 'italic'); }}
+                        className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
+                        title="Italic"
+                      >
+                        <Italic className="w-4 h-4" />
+                      </button>
+                      <div className="w-px h-4 bg-slate-700 mx-1" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); insertText(index, '@'); }}
+                        className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
+                        title="Mention"
+                      >
+                        <AtSign className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); insertText(index, '#'); }}
+                        className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
+                        title="Hashtag"
+                      >
+                        <Hash className="w-4 h-4" />
+                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(showEmojiPicker === index ? null : index as any); }}
+                          className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
+                          title="Emoji"
+                        >
+                          <span className="text-lg">😊</span>
+                        </button>
+                        
+                        {showEmojiPicker === index && (
+                          <div className="absolute top-full left-0 mt-2 p-3 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 w-64">
+                            <div className="space-y-2">
+                              {Object.entries(emojis).map(([cat, list]) => (
+                                <div key={cat}>
+                                  <p className="text-[10px] text-slate-500 uppercase mb-1">{cat}</p>
+                                  <div className="grid grid-cols-8 gap-1">
+                                    {list.map(emoji => (
+                                      <button
+                                        key={emoji}
+                                        onClick={(e) => { e.stopPropagation(); insertText(index, emoji, ''); setShowEmojiPicker(null); }}
+                                        className="w-6 h-6 hover:bg-slate-700 rounded flex items-center justify-center"
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1" />
+                      
+                      <label className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-white cursor-pointer">
+                        <ImageIcon className="w-4 h-4" />
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => addMedia(index, e.target.files)}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Textarea */}
+                    <textarea
+                      ref={(el) => {
+                        if (el) textareaRefs.current.set(tweet.id, el);
+                      }}
+                      value={tweet.content}
+                      onChange={(e) => updateTweetContent(index, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder={index === 0 ? "What's happening?" : `Tweet ${index + 1}...`}
+                      className="w-full min-h-[100px] bg-transparent text-white placeholder-slate-500 resize-none focus:outline-none text-base leading-relaxed"
                     />
+
+                    {/* Media Preview */}
+                    {tweet.media.length > 0 && (
+                      <div className="mt-3 flex gap-2">
+                        {tweet.media.map((media, mIdx) => (
+                          <div key={mIdx} className="relative w-20 h-20 rounded-lg overflow-hidden group">
+                            {media.type === 'image' ? (
+                              <img src={media.url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <video src={media.url} className="w-full h-full object-cover" />
+                            )}
+                            
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeMedia(index, mIdx); }}
+                              className="absolute top-1 right-1 w-5 h-5 bg-rose-500/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="w-3 h-3 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span className={`text-sm font-medium ${charColor}`}>
-                    {charCount}/{charLimit}
-                  </span>
                 </div>
-              </div>
+              ))}
+
+              {/* Add Tweet Button */}
+              <button
+                onClick={addTweet}
+                className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-700 hover:border-violet-500/50 rounded-xl text-slate-400 hover:text-violet-400 transition-colors w-full justify-center"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm">Add to thread</span>
+              </button>
             </div>
           </div>
 
-          {/* Right Side - Preview */}
-          {showPreview && (
-            <div className="w-80 border-l border-slate-800 bg-slate-900/30 p-6 overflow-y-auto">
-              <h3 className="text-sm font-medium text-slate-300 mb-4">Preview</h3>
-              
-              <div className="bg-black rounded-2xl p-4 border border-slate-800">
-                <div className="flex items-center gap-3 mb-3">
-                  {xAccounts[0]?.profileImageUrl ? (
-                    <img 
-                      src={xAccounts[0].profileImageUrl} 
-                      alt=""
-                      className="w-10 h-10 rounded-full object-cover" 
-                    />
-                  ) : (
-                    <div className="w-10 h-10 bg-slate-700 rounded-full" />
-                  )}
-                  <div>
-                    <p className="text-white font-medium text-sm">{xAccounts[0]?.accountName || 'Your Name'}</p>
-                    <p className="text-slate-500 text-xs">@{xAccounts[0]?.accountHandle || 'username'}</p>
-                  </div>
-                </div>
-                
-                <div className="text-white text-sm leading-relaxed whitespace-pre-wrap">
-                  {content ? renderFormattedText(content) : <span className="text-slate-600">Your post will appear here...</span>}
-                </div>
-                
-                {mediaFiles.length > 0 && (
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {mediaFiles.slice(0, 4).map((media, idx) => (
-                      <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-slate-800">
-                        {media.type === 'image' ? (
-                          <img src={media.url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <video src={media.url} className="w-full h-full object-cover" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                <div className="mt-3 flex items-center gap-4 text-slate-500">
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4" />
-                  </div>
+          {/* Right Sidebar - AI Panel */}
+          {showAIPanel && (
+            <div className="w-80 border-l border-slate-800 bg-slate-900/30 flex flex-col">
+              <div className="p-4 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="w-5 h-5 text-violet-400" />
+                  <h3 className="font-semibold text-white">AI Assistant</h3>
                 </div>
               </div>
 
-              <div className="mt-6 space-y-4">
-                <h3 className="text-sm font-medium text-slate-300">Schedule</h3>
-                
-                <div className="space-y-3">
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input
-                      type="date"
-                      value={scheduledDate}
-                      onChange={(e) => setScheduledDate(e.target.value)}
-                      className="w-full px-4 py-2.5 pl-10 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* AI Modes */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'generate', icon: Sparkles, label: 'Write for me' },
+                    { id: 'improve', icon: Flame, label: 'Make engaging' },
+                    { id: 'thread', icon: ListOrdered, label: 'To thread' },
+                    { id: 'hashtags', icon: Hash, label: 'Hashtags' },
+                  ].map((mode) => (
+                    <button
+                      key={mode.id}
+                      onClick={() => setAiMode({ type: mode.id as any, prompt: '' })}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        aiMode.type === mode.id
+                          ? 'bg-violet-600/20 border-violet-500 text-white'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <mode.icon className="w-4 h-4 mb-2" />
+                      <p className="text-xs font-medium">{mode.label}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AI Input */}
+                {aiMode.type && (
+                  <div className="space-y-3">
+                    <textarea
+                      value={aiMode.prompt}
+                      onChange={(e) => setAiMode({ ...aiMode, prompt: e.target.value })}
+                      placeholder={
+                        aiMode.type === 'generate' ? 'Topic or bullet points...' :
+                        aiMode.type === 'improve' ? 'What to improve?' :
+                        aiMode.type === 'thread' ? 'Convert current tweet to thread...' :
+                        'Suggest hashtags for...'
+                      }
+                      className="w-full h-24 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                     />
+                    
+                    <button
+                      onClick={handleAIAction}
+                      disabled={isGenerating || !aiMode.prompt.trim()}
+                      className="w-full py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          Generate
+                        </>
+                      )}
+                    </button>
                   </div>
-                  
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input
-                      type="time"
-                      value={scheduledTime}
-                      onChange={(e) => setScheduledTime(e.target.value)}
-                      className="w-full px-4 py-2.5 pl-10 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                    />
+                )}
+
+                {/* AI Suggestions */}
+                {aiSuggestions.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">Suggestions:</p>
+                    {aiSuggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => applyAISuggestion(suggestion)}
+                        className="w-full p-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-violet-500/50 rounded-xl text-left text-sm text-slate-300 transition-all"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Schedule Panel */}
+          {showSchedulePicker && !showAIPanel && (
+            <div className="w-72 border-l border-slate-800 bg-slate-900/30 p-4">
+              <h3 className="font-semibold text-white mb-4">Schedule</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-slate-400 mb-2 block">Date</label>
+                  <input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm text-slate-400 mb-2 block">Time</label>
+                  <input
+                    type="time"
+                    value={scheduledTime}
+                    onChange={(e) => setScheduledTime(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm"
+                  />
+                </div>
+
+                <div>
+                  <p className="text-sm text-slate-400 mb-2">Best times</p>
+                  <div className="space-y-2">
+                    {bestTimes.map((time) => (
+                      <button
+                        key={time.time}
+                        onClick={() => setScheduledTime(time.time)}
+                        className={`w-full p-2 rounded-lg text-left text-sm transition-colors ${
+                          scheduledTime === time.time
+                            ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{time.label}</span>
+                          <span className="text-xs opacity-70">{time.time}</span>
+                        </div>
+                        <p className="text-xs opacity-60 mt-0.5">{time.desc}</p>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -836,35 +767,43 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/50">
-          <button
-            onClick={() => handlePost(true)}
-            disabled={!content.trim() || !hasXConnected || isPosting || charCount > charLimit}
-            className="px-4 py-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-          >
-            {isPosting ? 'Posting...' : 'Post Now'}
-          </button>
-          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSchedulePicker(!showSchedulePicker)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                showSchedulePicker ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              {showSchedulePicker ? 'Scheduling' : 'Schedule'}
+            </button>
+            
+            <button
+              onClick={saveDraft}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-medium transition-colors"
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Saving...' : 'Draft'}
+            </button>
+          </div>
+
           <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
-              disabled={isPosting}
-              className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+              onClick={() => handlePublish(true)}
+              disabled={isPosting || tweets.every(t => !t.content.trim())}
+              className="px-4 py-2.5 text-slate-400 hover:text-white disabled:opacity-50 transition-colors"
             >
-              Cancel
+              {isPosting ? 'Publishing...' : 'Post Now'}
             </button>
+            
             <button
-              onClick={() => handlePost(false)}
-              disabled={!content.trim() || !hasXConnected || isPosting || charCount > charLimit}
+              onClick={() => handlePublish(false)}
+              disabled={isPosting || tweets.every(t => !t.content.trim()) || !showSchedulePicker}
               className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl font-medium transition-all flex items-center gap-2 shadow-lg shadow-violet-600/20"
             >
-              {isPosting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Scheduling...
-                </>
-              ) : (
-                'Schedule Post'
-              )}
+              <Send className="w-4 h-4" />
+              {isPosting ? 'Scheduling...' : showSchedulePicker ? 'Schedule' : 'Schedule'}
             </button>
           </div>
         </div>
