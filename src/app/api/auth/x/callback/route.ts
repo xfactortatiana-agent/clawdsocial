@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { cookies } from 'next/headers'
 
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET
@@ -14,11 +15,11 @@ export async function GET(request: Request) {
   const error = searchParams.get('error')
 
   if (error) {
-    return NextResponse.redirect(`/dashboard?error=${error}`)
+    return NextResponse.redirect(new URL(`/dashboard?error=${error}`, request.url))
   }
 
   if (!code) {
-    return NextResponse.redirect('/dashboard?error=no_code')
+    return NextResponse.redirect(new URL('/dashboard?error=no_code', request.url))
   }
 
   try {
@@ -33,14 +34,14 @@ export async function GET(request: Request) {
         grant_type: 'authorization_code',
         code,
         redirect_uri: REDIRECT_URI,
-        code_verifier: 'challenge' // PKCE verifier
+        code_verifier: 'challenge'
       })
     })
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text()
       console.error('Token exchange failed:', errorData)
-      return NextResponse.redirect('/dashboard?error=token_exchange_failed')
+      return NextResponse.redirect(new URL('/dashboard?error=token_exchange_failed', request.url))
     }
 
     const tokens = await tokenResponse.json()
@@ -55,12 +56,43 @@ export async function GET(request: Request) {
     const userData = await userResponse.json()
     const xUser = userData.data
 
-    // Store in database (simplified - in production, link to logged-in user)
-    // For now, we'll just redirect with success
-    
-    return NextResponse.redirect(`/dashboard?connected=x&username=${xUser.username}`)
+    // Get current user from cookie/session (simplified - using a temp user ID)
+    // In production, this should come from your auth system (Clerk)
+    const cookieStore = cookies()
+    const userId = cookieStore.get('user_id')?.value || 'temp-user-id'
+
+    // Store or update the X connection in database
+    await prisma.socialAccount.upsert({
+      where: {
+        workspaceId_platform_accountHandle: {
+          workspaceId: 'default-workspace',
+          platform: 'X',
+          accountHandle: xUser.username
+        }
+      },
+      update: {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        accountName: xUser.name,
+        profileImageUrl: xUser.profile_image_url,
+        lastSyncedAt: new Date()
+      },
+      create: {
+        workspaceId: 'default-workspace',
+        platform: 'X',
+        accountHandle: xUser.username,
+        accountName: xUser.name,
+        profileImageUrl: xUser.profile_image_url,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        isActive: true
+      }
+    })
+
+    // Redirect back to dashboard with success
+    return NextResponse.redirect(new URL(`/dashboard?connected=x&username=${xUser.username}`, request.url))
   } catch (error) {
     console.error('OAuth callback error:', error)
-    return NextResponse.redirect('/dashboard?error=oauth_failed')
+    return NextResponse.redirect(new URL('/dashboard?error=oauth_failed', request.url))
   }
 }
