@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { auth } from '@clerk/nextjs/server'
 
 export const runtime = 'nodejs'
 
@@ -11,6 +12,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
+
+  // Get the current user from Clerk
+  const { userId } = auth()
+  
+  if (!userId) {
+    return NextResponse.redirect(new URL('/sign-in?error=not_authenticated', request.url))
+  }
 
   if (error) {
     return NextResponse.redirect(
@@ -66,23 +74,34 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/settings?error=no_username', request.url))
     }
 
-    // Create default workspace if it doesn't exist
-    await prisma.workspace.upsert({
-      where: { id: 'default-workspace' },
+    // Create or get user in our database
+    const dbUser = await prisma.user.upsert({
+      where: { clerkId: userId },
       update: {},
       create: {
-        id: 'default-workspace',
-        name: 'Default Workspace',
-        slug: 'default',
-        ownerId: 'temp-user-id'
+        clerkId: userId,
+        email: 'temp@example.com', // Will be updated via Clerk webhook
+        name: xUser.name || xUser.username,
+        imageUrl: xUser.profile_image_url
       }
     })
 
-    // Save to database
+    // Create default workspace for user if not exists
+    const workspace = await prisma.workspace.upsert({
+      where: { slug: `user-${userId.slice(-8)}` },
+      update: {},
+      create: {
+        name: `${xUser.name || xUser.username}'s Workspace`,
+        slug: `user-${userId.slice(-8)}`,
+        ownerId: dbUser.id
+      }
+    })
+
+    // Save X connection to database
     await prisma.socialAccount.upsert({
       where: {
         workspaceId_platform_accountHandle: {
-          workspaceId: 'default-workspace',
+          workspaceId: workspace.id,
           platform: 'X',
           accountHandle: xUser.username
         }
@@ -96,7 +115,7 @@ export async function GET(request: Request) {
         isActive: true
       },
       create: {
-        workspaceId: 'default-workspace',
+        workspaceId: workspace.id,
         platform: 'X',
         accountHandle: xUser.username,
         accountName: xUser.name || xUser.username,

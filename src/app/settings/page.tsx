@@ -1,34 +1,35 @@
-"use client";
-
-import { useState, useEffect, Suspense } from "react";
+import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/db";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { redirect } from "next/navigation";
 
-function SettingsContent() {
-  const searchParams = useSearchParams();
-  const [xConnected, setXConnected] = useState(false);
-  const [xUsername, setXUsername] = useState("");
-  const [shinraConnected, setShinraConnected] = useState(false);
-  const [shinraUrl, setShinraUrl] = useState("");
+export default async function SettingsPage() {
+  const { userId } = auth();
 
-  useEffect(() => {
-    const connected = searchParams.get("connected");
-    const username = searchParams.get("username");
-    
-    if (connected === "x" && username) {
-      setXConnected(true);
-      setXUsername(username);
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  // Get user from database
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    include: {
+      workspaces: {
+        include: {
+          workspace: {
+            include: {
+              accounts: true
+            }
+          }
+        }
+      }
     }
-  }, [searchParams]);
+  });
 
-  const handleXConnect = () => {
-    window.location.href = "/api/auth/x";
-  };
-
-  const handleShinraConnect = () => {
-    localStorage.setItem("shinra_url", shinraUrl);
-    setShinraConnected(true);
-  };
+  // Get connected X accounts
+  const xAccounts = user?.workspaces.flatMap(w => 
+    w.workspace.accounts.filter(a => a.platform === 'X' && a.isActive)
+  ) || [];
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -62,73 +63,51 @@ function SettingsContent() {
           </div>
 
           <div className="p-6">
-            <div className="flex items-center justify-between py-4 border-b border-slate-800 last:border-0">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
-                  <span className="text-2xl">𝕏</span>
+            {xAccounts.length > 0 ? (
+              xAccounts.map((account) => (
+                <div key={account.id} className="flex items-center justify-between py-4 border-b border-slate-800 last:border-0">
+                  <div className="flex items-center gap-4">
+                    {account.profileImageUrl ? (
+                      <img 
+                        src={account.profileImageUrl} 
+                        alt={account.accountName}
+                        className="w-12 h-12 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
+                        <span className="text-2xl">𝕏</span>
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium text-white">X (Twitter)</p>
+                      <p className="text-sm text-emerald-400">Connected as @{account.accountHandle}</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm">Connected ✓</span>
                 </div>
-                <div>
-                  <p className="font-medium text-white">X (Twitter)</p>
-                  {xConnected ? (
-                    <p className="text-sm text-emerald-400">Connected as @{xUsername}</p>
-                  ) : (
+              ))
+            ) : (
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
+                    <span className="text-2xl">𝕏</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-white">X (Twitter)</p>
                     <p className="text-sm text-slate-500">Not connected</p>
-                  )}
+                  </div>
                 </div>
+                <a
+                  href="/api/auth/x"
+                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
+                >
+                  Connect
+                </a>
               </div>
-              <button
-                onClick={handleXConnect}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  xConnected
-                    ? "bg-emerald-600/20 text-emerald-400"
-                    : "bg-violet-600 text-white hover:bg-violet-700"
-                }`}
-              >
-                {xConnected ? "Connected ✓" : "Connect"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-white">ClawdCorp OS</h2>
-              <span className="px-2 py-0.5 bg-violet-600/20 text-violet-400 text-xs rounded-full">Beta</span>
-            </div>
-            <p className="text-sm text-slate-400">Connect to Shinra Mission Control</p>
-          </div>
-
-          <div className="p-6">
-            <div className="space-y-4">
-              <input
-                type="url"
-                value={shinraUrl}
-                onChange={(e) => setShinraUrl(e.target.value)}
-                placeholder="https://your-shinra.vercel.app"
-                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-              <button
-                onClick={handleShinraConnect}
-                disabled={!shinraUrl}
-                className="w-full px-4 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 disabled:bg-slate-800 disabled:text-slate-500"
-              >
-                {shinraConnected ? "Connected ✓" : "Connect to Shinra"}
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </main>
     </div>
-  );
-}
-
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="text-slate-400">Loading...</div>
-    </div>}>
-      <SettingsContent />
-    </Suspense>
   );
 }
