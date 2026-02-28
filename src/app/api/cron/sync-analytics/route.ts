@@ -47,11 +47,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Get all active X accounts
+    // Get all active X accounts with workspace owner
     const accounts = await prisma.socialAccount.findMany({
       where: { 
         platform: 'X',
         isActive: true
+      },
+      include: {
+        workspace: {
+          select: {
+            ownerId: true
+          }
+        }
       }
     })
 
@@ -159,6 +166,9 @@ export async function GET(request: Request) {
         
         console.log(`[Sync] Found ${tweets.length} tweets for @${account.accountHandle}`)
         
+        // Get workspace owner as createdBy
+        const createdById = account.workspace?.ownerId || account.userId || ''
+        
         let synced = 0
         let created = 0
         let updated = 0
@@ -192,7 +202,7 @@ export async function GET(request: Request) {
                 data: {
                   workspaceId: account.workspaceId,
                   accountId: account.id,
-                  createdById: account.userId || '',
+                  createdById: createdById,
                   content: tweet.text,
                   status: 'PUBLISHED',
                   publishedAt: new Date(tweet.created_at),
