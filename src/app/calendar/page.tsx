@@ -43,6 +43,7 @@ interface Post {
   publishedAt?: Date;
   platform: string;
   mediaCount?: number;
+  mediaUrls?: string[];
 }
 
 interface GapWarning {
@@ -444,8 +445,9 @@ export default function CalendarPage() {
                         content: '',
                         status: 'draft',
                         scheduledFor: day,
-                        platform: 'X'
-                      });
+                        platform: 'X',
+                        media: []
+                      } as any);
                       setShowComposer(true);
                     }
                   }}
@@ -477,7 +479,15 @@ export default function CalendarPage() {
                         onDragStart={() => handleDragStart(post)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditingPost(post);
+                          // Format post for composer
+                          const composerPost = {
+                            ...post,
+                            media: (post.mediaUrls || []).map((url: string) => ({
+                              url,
+                              type: url.match(/\.(mp4|mov|webm)$/i) ? 'video' : 'image' as const
+                            }))
+                          };
+                          setEditingPost(composerPost as any);
                           setShowComposer(true);
                         }}
                         className={`px-2.5 py-2 rounded-lg text-xs cursor-pointer group transition-all ${
