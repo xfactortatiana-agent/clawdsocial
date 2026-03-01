@@ -3,29 +3,35 @@ import { createHmac } from "crypto";
 import { prisma } from "@/lib/db";
 
 // X webhook for post status updates
-// Docs: https://developer.twitter.com/en/docs/twitter-api/webhooks/overview
+// Docs: https://docs.x.com/x-api/webhooks/quickstart
+// IMPORTANT: Use X_CLIENT_SECRET as the webhook secret!
 
 // GET - Webhook verification (CRC challenge)
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const crcToken = searchParams.get('crc_token');
   
-  // Debug endpoint to test CRC
+  // X uses the app's consumer secret (X_CLIENT_SECRET) for webhooks
+  // NOT a separate webhook secret
+  const consumerSecret = process.env.X_CLIENT_SECRET;
+  
+  if (!consumerSecret) {
+    console.error('X_CLIENT_SECRET not set');
+    return NextResponse.json({ error: 'Consumer secret not configured' }, { status: 500 });
+  }
+  
+  // Debug mode
   if (searchParams.get('debug') === 'true') {
     const testToken = crcToken || 'test123';
-    const secret = process.env.X_WEBHOOK_SECRET || '';
-    
-    // X expects the consumer secret as the key (not the webhook secret)
-    // But for Account Activity API, we use the webhook secret
-    const hmac = createHmac('sha256', secret).update(testToken).digest('base64');
+    const hmac = createHmac('sha256', consumerSecret)
+      .update(testToken)
+      .digest('base64');
     
     return NextResponse.json({
-      secret_set: !!process.env.X_WEBHOOK_SECRET,
-      secret_length: secret.length,
-      secret_preview: secret.substring(0, 10) + '...',
+      using: 'X_CLIENT_SECRET',
+      secret_length: consumerSecret.length,
       crc_token: testToken,
-      response_token: `sha256=${hmac}`,
-      note: "If X says invalid, try using X_CLIENT_SECRET instead of X_WEBHOOK_SECRET"
+      response_token: `sha256=${hmac}`
     });
   }
   
@@ -33,23 +39,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing crc_token' }, { status: 400 });
   }
   
-  const secret = process.env.X_WEBHOOK_SECRET;
-  
-  if (!secret) {
-    console.error('X_WEBHOOK_SECRET not set');
-    return NextResponse.json({ error: 'Secret not configured' }, { status: 500 });
-  }
-  
   try {
-    // Generate HMAC-SHA256
-    // X Account Activity API uses the webhook secret as the key
-    const hmac = createHmac('sha256', secret)
+    // X expects: HMAC-SHA256(crc_token, consumer_secret)
+    const hmac = createHmac('sha256', consumerSecret)
       .update(crcToken)
       .digest('base64');
     
     const responseToken = `sha256=${hmac}`;
     
-    console.log('CRC Check:', { 
+    console.log('CRC Response:', { 
       token_preview: crcToken.substring(0, 20),
       response_preview: responseToken.substring(0, 30)
     });
@@ -66,31 +64,46 @@ export async function GET(req: NextRequest) {
 // POST - Handle webhook events
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    // Verify signature
+    const signature = req.headers.get('x-twitter-webhooks-signature');
+    const consumerSecret = process.env.X_CLIENT_SECRET;
     
-    console.log('Webhook received:', body.event);
-    
-    switch (body.event) {
-      case 'tweet.create':
-        await prisma.post.updateMany({
-          where: { platformPostId: body.tweet?.id },
-          data: {
-            status: 'PUBLISHED',
-            publishedAt: new Date(),
-            postUrl: `https://twitter.com/i/web/status/${body.tweet?.id}`
-          }
-        });
-        break;
-        
-      case 'tweet.delete':
-        await prisma.post.updateMany({
-          where: { platformPostId: body.tweet?.id },
-          data: { status: 'FAILED' }
-        });
-        break;
-        
-      default:
-        console.log('Unhandled event:', body.event);
+    if (signature && consumerSecret) {
+      const body = await req.text();
+      const expected = `sha256=${createHmac('sha256', consumerSecret).update(body).digest('base64')}`;
+      
+      if (signature !== expected) {
+        console.error('Invalid webhook signature');
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+      
+      // Re-parse body after verification
+      const event = JSON.parse(body);
+      
+      console.log('Webhook event:', event.event);
+      
+      switch (event.event) {
+        case 'tweet.create':
+          await prisma.post.updateMany({
+            where: { platformPostId: event.tweet?.id },
+            data: {
+              status: 'PUBLISHED',
+              publishedAt: new Date(),
+              postUrl: `https://twitter.com/i/web/status/${event.tweet?.id}`
+            }
+          });
+          break;
+          
+        case 'tweet.delete':
+          await prisma.post.updateMany({
+            where: { platformPostId: event.tweet?.id },
+            data: { status: 'FAILED' }
+          });
+          break;
+          
+        default:
+          console.log('Unhandled event:', event.event);
+      }
     }
     
     return NextResponse.json({ received: true });

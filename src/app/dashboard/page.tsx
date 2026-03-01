@@ -17,11 +17,13 @@ import {
   Sparkles,
   Send,
   MoreHorizontal,
-  X
+  X,
+  CreditCard
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ComposerModal } from "@/components/composer/ComposerModal";
+import { UsageWidget } from "@/components/billing/UsageWidget";
 
 interface Post {
   id: string;
@@ -167,6 +169,14 @@ export default function DashboardPage() {
                 <span className="text-sm text-emerald-400">@{xAccount.accountHandle}</span>
               </div>
             )}
+
+            <Link
+              href="/billing"
+              className="hidden sm:flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span className="text-sm font-medium">Billing</span>
+            </Link>
             
             <button 
               onClick={() => setShowComposer(true)}
@@ -212,8 +222,8 @@ export default function DashboardPage() {
           <StatCard 
             icon={Users}
             label="Followers"
-            value={analytics?.account?.followerCount?.toLocaleString() || '0'}
-            trend={analytics?.account?.followerCount > 1000 ? '+5%' : undefined}
+            value={analytics?.currentFollowers?.toLocaleString() || xAccount?.followerCount?.toLocaleString() || '0'}
+            trend={analytics?.followersChange ? `${analytics.followersChange > 0 ? '+' : ''}${analytics.followersChange}%` : undefined}
             color="emerald"
           />
         </div>
@@ -346,6 +356,9 @@ export default function DashboardPage() {
 
           {/* Right Column - Quick Actions & Drafts */}
           <div className="space-y-8">
+            {/* Usage Widget */}
+            <UsageWidget />
+
             {/* Quick Actions */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
               <h2 className="font-semibold text-white mb-4">Quick Actions</h2>
