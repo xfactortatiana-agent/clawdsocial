@@ -31,6 +31,7 @@ interface Post {
   status: 'draft' | 'scheduled' | 'published';
   scheduledFor?: Date;
   publishedAt?: Date;
+  updatedAt?: Date;
   platform: string;
   likes?: number;
   replies?: number;
@@ -84,6 +85,7 @@ export default function DashboardPage() {
   const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showComposer, setShowComposer] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -393,14 +395,30 @@ export default function DashboardPage() {
             {/* Drafts */}
             {drafts.length > 0 && (
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-800">
+                <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
                   <h2 className="font-semibold text-white">Drafts</h2>
+                  <span className="text-sm text-slate-500">{drafts.length} saved</span>
                 </div>
 
                 <div className="divide-y divide-slate-800">
                   {drafts.map((draft) => (
-                    <div key={draft.id} className="px-6 py-3 hover:bg-slate-800/30 transition-colors cursor-pointer">
-                      <p className="text-slate-400 text-sm line-clamp-2">{draft.content}</p>
+                    <div 
+                      key={draft.id} 
+                      onClick={() => {
+                        setEditingPost(draft);
+                        setShowComposer(true);
+                      }}
+                      className="px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer group"
+                    >
+                      <p className="text-slate-300 text-sm line-clamp-2 mb-2">{renderFormattedText(draft.content) || <span className="text-slate-500 italic">Empty draft</span>}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">
+                          {draft.updatedAt ? `Edited ${format(new Date(draft.updatedAt), 'MMM d, h:mm a')}` : 'Just created'}
+                        </span>
+                        <span className="text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                          Click to edit →
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -437,8 +455,14 @@ export default function DashboardPage() {
       {/* Composer Modal */}
       <ComposerModal
         isOpen={showComposer}
-        onClose={() => setShowComposer(false)}
+        onClose={() => {
+          setShowComposer(false);
+          setEditingPost(null);
+          fetchDashboardData();
+        }}
+        initialDate={editingPost?.scheduledFor}
         connectedAccounts={connectedAccounts}
+        editingPost={editingPost}
       />
     </div>
   );
