@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Get app URL with fallback
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://clawdsocial.vercel.app';
+    
+    // Ensure URL has https://
+    const baseUrl = appUrl.startsWith('http') ? appUrl : `https://${appUrl}`;
+
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -57,8 +63,8 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?success=true&plan=${planId}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?canceled=true`,
+      success_url: `${baseUrl}/settings?success=true&plan=${planId}`,
+      cancel_url: `${baseUrl}/settings?canceled=true`,
       subscription_data: {
         metadata: {
           userId: user.id,
