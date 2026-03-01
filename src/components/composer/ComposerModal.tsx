@@ -916,6 +916,95 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
               </div>
             </div>
           )}
+
+          {/* Preview Panel - Default when AI and Schedule are closed */}
+          {!showAIPanel && !showSchedulePicker && (
+            <div className="w-80 border-l border-slate-800 bg-slate-900/30 p-6 overflow-y-auto">
+              <h3 className="font-semibold text-white mb-4">Preview</h3>
+              
+              {xAccounts[0] ? (
+                <div className="bg-black rounded-2xl p-4 border border-slate-800">
+                  {/* X Post Preview */}
+                  <div className="flex items-center gap-3 mb-3">
+                    {xAccounts[0]?.profileImageUrl ? (
+                      <img 
+                        src={xAccounts[0].profileImageUrl} 
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover" 
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-slate-700 rounded-full" />
+                    )}
+                    <div>
+                      <p className="text-white font-medium text-sm">{xAccounts[0]?.accountName || 'Your Name'}</p>
+                      <p className="text-slate-500 text-xs">@{xAccounts[0]?.accountHandle || 'username'}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Tweet Content */}
+                  <div className="space-y-4">
+                    {tweets.map((tweet, idx) => (
+                      <div key={tweet.id} className={idx > 0 ? 'pt-4 border-t border-slate-800' : ''}>
+                        <div className="text-white text-sm leading-relaxed whitespace-pre-wrap mb-2">
+                          {tweet.content ? renderFormattedText(tweet.content) : <span className="text-slate-600">Your post will appear here...</span>}
+                        </div>
+                        
+                        {/* Media Preview */}
+                        {tweet.media.length > 0 && (
+                          <div className={`mt-2 grid gap-2 ${tweet.media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                            {tweet.media.slice(0, 4).map((media, mIdx) => (
+                              <div key={mIdx} className="aspect-video rounded-xl overflow-hidden bg-slate-800">
+                                {media.type === 'image' ? (
+                                  <img src={media.url} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <video src={media.url} className="w-full h-full object-cover" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {tweets.length > 1 && (
+                          <p className="text-xs text-slate-500 mt-2">{idx + 1}/{tweets.length}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Engagement Icons */}
+                  <div className="mt-4 flex items-center gap-4 text-slate-500">
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  <p>Connect your X account to see preview</p>
+                </div>
+              )}
+              
+              {/* Post Info */}
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Platform</span>
+                  <span className="text-white">X (Twitter)</span>
+                </div>
+                
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Status</span>
+                  <span className="text-emerald-400">Ready to post</span>
+                </div>
+                
+                {scheduledDate && scheduledTime && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Scheduled</span>
+                    <span className="text-white">{format(new Date(`${scheduledDate}T${scheduledTime}`), 'MMM d, h:mm a')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
