@@ -88,6 +88,7 @@ export default function CalendarPage() {
         const data = await postsRes.json();
         setPosts(data.posts?.map((p: any) => ({
           ...p,
+          status: p.status?.toLowerCase() || 'draft',
           scheduledFor: p.scheduledFor ? new Date(p.scheduledFor) : undefined,
           publishedAt: p.publishedAt ? new Date(p.publishedAt) : undefined,
         })) || []);

@@ -101,7 +101,10 @@ export default function DashboardPage() {
 
       if (postsRes.ok) {
         const postsData = await postsRes.json();
-        setPosts(postsData.posts || []);
+        setPosts((postsData.posts || []).map((p: any) => ({
+          ...p,
+          status: p.status?.toLowerCase() || 'draft',
+        })));
       }
       
       if (analyticsRes.ok) {
