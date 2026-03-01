@@ -377,10 +377,14 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          posts,
+          posts: posts.map(p => ({
+            ...p,
+            mediaUrls: p.media.map((m: any) => m.url)
+          })),
           isThread,
           scheduledFor,
-          platform: 'X'
+          platform: 'X',
+          publishNow
         })
       });
 
