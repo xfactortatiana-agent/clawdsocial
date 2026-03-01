@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import OpenAI from "openai";
+import { getVoiceProfile, generateVoicePrompt } from "@/lib/voice";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -15,13 +16,18 @@ export async function POST(req: NextRequest) {
 
     const { mode, prompt, currentContent, isThread } = await req.json();
 
+    // Get user's brand voice
+    const voiceProfile = await getVoiceProfile(userId);
+    const voicePrompt = generateVoicePrompt(voiceProfile);
+
     let systemPrompt = "";
     let userPrompt = "";
 
     switch (mode) {
       case "generate":
-        systemPrompt = `You are a social media expert who writes engaging X posts. 
-Write in a natural, conversational tone. Use formatting like **bold** for emphasis and *italic* for subtle points.
+        systemPrompt = `You are a social media expert who writes engaging X posts.
+${voicePrompt}
+Use formatting like **bold** for emphasis and *italic* for subtle points.
 Keep posts under 280 characters. Be punchy and memorable.`;
         userPrompt = `Write an X post about: ${prompt}`;
         break;
@@ -38,7 +44,8 @@ Keep posts under 280 characters. Be punchy and memorable.`;
           improveInstruction = prompt || "making it more engaging";
         }
         
-        systemPrompt = `You are a social media editor specializing in X posts. 
+        systemPrompt = `You are a social media editor specializing in X posts.
+${voicePrompt}
 Improve the given post based on the specific instruction.
 Use formatting (**bold**, *italic*) where it adds emphasis.
 Return 3 distinct variations, each under 280 characters.`;
@@ -49,6 +56,7 @@ ${currentContent}`;
 
       case "thread":
         systemPrompt = `Convert the given content into a thread (series of connected tweets).
+${voicePrompt}
 Each tweet should be under 280 characters.
 Number them 1/N, 2/N, etc.
 Make each tweet engaging on its own but flow together.`;
@@ -78,7 +86,6 @@ Return just the hashtags, one per line.`;
 
     // Parse response based on mode
     if (mode === "improve" || mode === "generate") {
-      // Split into suggestions if multiple options provided
       const suggestions = response
         .split(/\n\n|\n(?=\d[\.\)]|\-)/)
         .map(s => s.trim())
@@ -91,7 +98,6 @@ Return just the hashtags, one per line.`;
     }
 
     if (mode === "thread") {
-      // Parse thread tweets
       const tweets = response
         .split(/\n/)
         .filter(line => line.trim().length > 0)
