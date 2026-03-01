@@ -18,7 +18,9 @@ import {
   Send,
   MoreHorizontal,
   X,
-  CreditCard
+  CreditCard,
+  Edit2,
+  Trash2
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { format, isToday, isTomorrow } from "date-fns";
@@ -31,12 +33,14 @@ interface Post {
   status: 'draft' | 'scheduled' | 'published';
   scheduledFor?: Date;
   publishedAt?: Date;
+  createdAt?: Date;
   updatedAt?: Date;
   platform: string;
   likes?: number;
   replies?: number;
   reposts?: number;
   impressions?: number;
+  mediaUrls?: string[];
 }
 
 // Parse content with formatting to React elements
@@ -86,6 +90,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showComposer, setShowComposer] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [deletingPost, setDeletingPost] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -144,6 +150,33 @@ export default function DashboardPage() {
   const totalPosts = posts.filter(p => p.status === 'published').length;
   const scheduledCount = upcomingPosts.length;
   const draftCount = drafts.length;
+
+  // Delete post function
+  const deletePost = async (postId: string) => {
+    try {
+      const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setPosts(posts.filter(p => p.id !== postId));
+        setActiveMenu(null);
+        setDeletingPost(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete post:', err);
+    }
+  };
+
+  // Edit post function
+  const editPost = (post: Post) => {
+    setEditingPost({
+      ...post,
+      media: (post.mediaUrls || []).map((url: string) => ({
+        url,
+        type: url.match(/\.(mp4|mov|webm)$/i) ? 'video' : 'image'
+      }))
+    } as any);
+    setShowComposer(true);
+    setActiveMenu(null);
+  };
 
   if (isLoading) {
     return (
@@ -297,9 +330,39 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         
-                        <button className="p-2 hover:bg-slate-800 rounded-lg text-slate-500">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
+                        <div className="relative">
+                          <button 
+                            onClick={() => setActiveMenu(activeMenu === post.id ? null : post.id)}
+                            className="p-2 hover:bg-slate-800 rounded-lg text-slate-500"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+                          
+                          {activeMenu === post.id && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-10" 
+                                onClick={() => setActiveMenu(null)}
+                              />
+                              <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 py-1">
+                                <button
+                                  onClick={() => editPost(post)}
+                                  className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => setDeletingPost(post.id)}
+                                  className="w-full px-4 py-2 text-left text-sm text-rose-400 hover:bg-slate-700 flex items-center gap-2"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -406,21 +469,61 @@ export default function DashboardPage() {
                 <div className="divide-y divide-slate-800">
                   {drafts.map((draft) => (
                     <div 
-                      key={draft.id} 
-                      onClick={() => {
-                        setEditingPost(draft);
-                        setShowComposer(true);
-                      }}
-                      className="px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer group"
+                      key={draft.id}
+                      className="px-6 py-4 hover:bg-slate-800/30 transition-colors group"
                     >
-                      <p className="text-slate-300 text-sm line-clamp-2 mb-2">{renderFormattedText(draft.content) || <span className="text-slate-500 italic">Empty draft</span>}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500">
-                          {draft.updatedAt ? `Edited ${format(new Date(draft.updatedAt), 'MMM d, h:mm a')}` : 'Just created'}
-                        </span>
-                        <span className="text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                          Click to edit →
-                        </span>
+                      <div className="flex items-start gap-3">
+                        <div 
+                          onClick={() => editPost(draft)}
+                          className="flex-1 cursor-pointer"
+                        >
+                          <p className="text-slate-300 text-sm line-clamp-2 mb-2">{renderFormattedText(draft.content) || <span className="text-slate-500 italic">Empty draft</span>}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-500">
+                              Edited {format(new Date(draft.updatedAt || draft.createdAt || Date.now()), 'MMM d, h:mm a')}
+                            </span>
+                            <span className="text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Click to edit →
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="relative">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenu(activeMenu === draft.id ? null : draft.id);
+                            }}
+                            className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+                          
+                          {activeMenu === draft.id && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-10" 
+                                onClick={() => setActiveMenu(null)}
+                              />
+                              <div className="absolute right-0 top-full mt-1 w-36 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 py-1">
+                                <button
+                                  onClick={() => editPost(draft)}
+                                  className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => setDeletingPost(draft.id)}
+                                  className="w-full px-4 py-2 text-left text-sm text-rose-400 hover:bg-slate-700 flex items-center gap-2"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -467,6 +570,39 @@ export default function DashboardPage() {
         connectedAccounts={connectedAccounts}
         editingPost={editingPost}
       />
+
+      {/* Delete Confirmation Modal */}
+      {deletingPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setDeletingPost(null)} />
+          
+          <div className="relative bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="w-12 h-12 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6 text-rose-400" />
+            </div>
+            
+            <h3 className="text-lg font-semibold text-white text-center mb-2">Delete Post?</h3>
+            <p className="text-slate-400 text-center text-sm mb-6">
+              This action cannot be undone. The post will be permanently removed.
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeletingPost(null)}
+                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deletePost(deletingPost)}
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
