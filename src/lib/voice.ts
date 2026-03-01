@@ -17,6 +17,10 @@ interface VoiceProfile {
   topics: string[];
 }
 
+// In-memory cache for voice profiles (since we can't use DB for now)
+const voiceProfileCache: Record<string, { profile: VoiceProfile; timestamp: number }> = {};
+const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 export async function analyzeBrandVoice(userId: string): Promise<VoiceProfile | null> {
   // Get user's last 50 posts
   const posts = await prisma.post.findMany({
@@ -60,31 +64,29 @@ export async function analyzeBrandVoice(userId: string): Promise<VoiceProfile | 
 
   const analysis = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
-  // Save to database
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      voiceProfile: JSON.stringify(analysis)
-    }
-  });
-
-  return {
+  const profile: VoiceProfile = {
     userId,
     ...analysis
   };
+
+  // Cache in memory
+  voiceProfileCache[userId] = {
+    profile,
+    timestamp: Date.now()
+  };
+
+  return profile;
 }
 
 export async function getVoiceProfile(userId: string): Promise<VoiceProfile | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId }
-  });
-
-  if (!user?.voiceProfile) {
-    // Analyze if not exists
-    return analyzeBrandVoice(userId);
+  // Check cache first
+  const cached = voiceProfileCache[userId];
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.profile;
   }
 
-  return JSON.parse(user.voiceProfile);
+  // Analyze fresh
+  return analyzeBrandVoice(userId);
 }
 
 export function generateVoicePrompt(profile: VoiceProfile | null): string {
@@ -103,19 +105,4 @@ export function generateVoicePrompt(profile: VoiceProfile | null): string {
 - Focus on topics: ${profile.topics.join(', ')}
 
 Match this voice exactly. The user should not be able to tell it was AI-generated.`;
-}
-
-// Check if voice profile needs refresh (monthly)
-export async function shouldRefreshVoiceProfile(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { voiceProfileUpdatedAt: true }
-  });
-
-  if (!user?.voiceProfileUpdatedAt) return true;
-
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-
-  return user.voiceProfileUpdatedAt < oneMonthAgo;
 }
