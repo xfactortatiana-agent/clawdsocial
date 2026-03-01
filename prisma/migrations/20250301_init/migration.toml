@@ -1,0 +1,10 @@
+{
+  "id": "20250301_init",
+  "checksum": "baseline",
+  "finished_at": "2025-03-01T00:00:00.000Z",
+  "migration_name": "init",
+  "logs": "",
+  "rolled_back_at": null,
+  "started_at": "2025-03-01T00:00:00.000Z",
+  "applied_steps_count": 1
+}

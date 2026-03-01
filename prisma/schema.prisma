@@ -19,6 +19,15 @@ model User {
   imageUrl      String?
   plan          Plan      @default(FREE)
   stripeCustomerId String? @unique
+  
+  // Brand voice profile
+  voiceProfile  String?   @db.Text
+  voiceProfileUpdatedAt DateTime?
+  
+  // Preferences
+  preferredPostTimes String[] @default([])
+  notificationSettings Json?
+  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
