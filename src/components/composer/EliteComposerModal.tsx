@@ -43,6 +43,9 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isBoldActive, setIsBoldActive] = useState(false);
   const [isItalicActive, setIsItalicActive] = useState(false);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [cursorPosition, setCursorPosition] = useState(0);
   
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,12 +84,23 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
     document.execCommand('bold', false);
     updateActiveStates();
     updateContentFromEditor();
+    restoreCursor();
   };
   
   const toggleItalic = () => {
     document.execCommand('italic', false);
     updateActiveStates();
     updateContentFromEditor();
+    restoreCursor();
+  };
+  
+  const restoreCursor = () => {
+    // Small delay to let execCommand complete, then focus back
+    setTimeout(() => {
+      if (editorRef.current) {
+        editorRef.current.focus();
+      }
+    }, 0);
   };
   
   const updateActiveStates = () => {
@@ -96,15 +110,63 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
   
   const updateContentFromEditor = () => {
     if (editorRef.current) {
-      setHtmlContent(editorRef.current.innerHTML);
+      let html = editorRef.current.innerHTML;
+      
+      // Auto-link URLs
+      html = html.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>'
+      );
+      
+      // Highlight hashtags
+      html = html.replace(
+        /(^|\s)(#[a-zA-Z0-9_]+)/g,
+        '$1<span class="text-blue-400">$2</span>'
+      );
+      
+      // Only update if changed to avoid cursor jumping
+      if (html !== editorRef.current.innerHTML) {
+        const selection = window.getSelection();
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+        
+        editorRef.current.innerHTML = html;
+        
+        // Restore cursor
+        if (range && selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+      
+      setHtmlContent(html);
       setContent(editorRef.current.innerText);
     }
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Check for @ to trigger mentions
+    if (e.key === '@') {
+      setShowMentions(true);
+      setMentionQuery('');
+    }
+    // Close mentions on escape
+    if (e.key === 'Escape') {
+      setShowMentions(false);
+    }
+  };
+  
+  const insertMention = (username: string) => {
+    document.execCommand('insertText', false, `@${username} `);
+    updateContentFromEditor();
+    setShowMentions(false);
+    restoreCursor();
   };
   
   const insertEmoji = (emoji: string) => {
     document.execCommand('insertText', false, emoji);
     updateContentFromEditor();
     setShowEmojiPicker(false);
+    restoreCursor();
   };
   
   // Media handling
@@ -219,11 +281,29 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                 onInput={updateContentFromEditor}
                 onKeyUp={updateActiveStates}
                 onMouseUp={updateActiveStates}
+                onKeyDown={handleKeyDown}
                 className="w-full min-h-[200px] bg-transparent text-white text-lg placeholder-slate-600 focus:outline-none"
                 style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.5' }}
                 data-placeholder="What's happening?"
                 suppressContentEditableWarning
               />
+              
+              {/* Mentions Dropdown */}
+              {showMentions && (
+                <div className="absolute mt-2 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 py-2">
+                  <p className="px-4 py-2 text-xs text-slate-500 uppercase">Mention someone</p>
+                  {['username1', 'username2', 'username3'].map(user => (
+                    <button
+                      key={user}
+                      onClick={() => insertMention(user)}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <span className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center text-xs">@{user[0]}</span>
+                      {user}
+                    </button>
+                  ))}
+                </div>
+              )}
               
               {media.length > 0 && (
                 <div className={`mt-4 grid gap-2 ${media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
