@@ -81,54 +81,17 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
     setPostStatus(null);
   };
 
-  // Save cursor position before formatting
-  const saveCursorPosition = () => {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      return {
-        startContainer: range.startContainer,
-        startOffset: range.startOffset,
-        endContainer: range.endContainer,
-        endOffset: range.endOffset
-      };
-    }
-    return null;
-  };
-
-  // Restore cursor position after formatting
-  const restoreCursorPosition = (saved: any) => {
-    if (!saved || !editorRef.current) return;
-
-    const selection = window.getSelection();
-    const range = document.createRange();
-
-    try {
-      range.setStart(saved.startContainer, saved.startOffset);
-      range.setEnd(saved.endContainer, saved.endOffset);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    } catch (e) {
-      // Fallback: just focus at end
-      editorRef.current.focus();
-    }
-  };
-
   // Rich text formatting using execCommand for visual editing
   const toggleBold = () => {
-    const saved = saveCursorPosition();
     document.execCommand('bold', false);
     updateActiveStates();
     updateContentFromEditor();
-    setTimeout(() => restoreCursorPosition(saved), 0);
   };
 
   const toggleItalic = () => {
-    const saved = saveCursorPosition();
     document.execCommand('italic', false);
     updateActiveStates();
     updateContentFromEditor();
-    setTimeout(() => restoreCursorPosition(saved), 0);
   };
 
   const updateActiveStates = () => {
@@ -138,35 +101,9 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
 
   const updateContentFromEditor = () => {
     if (editorRef.current) {
-      let html = editorRef.current.innerHTML;
-
-      // Auto-link URLs
-      html = html.replace(
-        /(https?:\/\/[^\s<]+)/g,
-        '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>'
-      );
-
-      // Highlight hashtags
-      html = html.replace(
-        /(^|\s)(#[a-zA-Z0-9_]+)/g,
-        '$1<span class="text-blue-400">$2</span>'
-      );
-
-      // Only update if changed to avoid cursor jumping
-      if (html !== editorRef.current.innerHTML) {
-        const selection = window.getSelection();
-        const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-
-        editorRef.current.innerHTML = html;
-
-        // Restore cursor
-        if (range && selection) {
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
-      }
-
-      setHtmlContent(html);
+      // Just sync content without re-processing HTML
+      // (links and hashtags are handled by the browser's contentEditable)
+      setHtmlContent(editorRef.current.innerHTML);
       setContent(editorRef.current.innerText);
     }
   };
@@ -200,9 +137,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
 
   const insertLink = () => {
     if (!linkUrl) return;
-
-    const saved = saveCursorPosition();
-
+    
     // If text is selected, replace it with link
     if (linkText) {
       document.execCommand('insertHTML', false, `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">${linkText}</a>`);
@@ -210,12 +145,11 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       // Insert new link
       document.execCommand('createLink', false, linkUrl);
     }
-
+    
     updateContentFromEditor();
     setShowLinkEditor(false);
     setLinkUrl('');
     setLinkText('');
-    setTimeout(() => restoreCursorPosition(saved), 0);
   };
 
   const insertEmoji = (emoji: string) => {
