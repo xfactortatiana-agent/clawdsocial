@@ -39,6 +39,11 @@ export default function SettingsPage() {
     window.location.href = '/api/auth/x';
   };
 
+  const handleSwitchAccount = () => {
+    // This will log out of X first, then redirect to auth
+    window.location.href = '/api/auth/x?switch=true';
+  };
+
   const handleDisconnectX = async (accountId: string) => {
     try {
       await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
@@ -247,6 +252,13 @@ export default function SettingsPage() {
                   className="w-full mt-4 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-700"
                 >
                   + Connect Another X Account
+                </button>
+                
+                <button
+                  onClick={handleSwitchAccount}
+                  className="w-full mt-2 px-4 py-2 border border-slate-700 text-slate-400 rounded-lg text-sm font-medium hover:bg-slate-800"
+                >
+                  ↻ Switch X Account
                 </button>
               </div>
             )}

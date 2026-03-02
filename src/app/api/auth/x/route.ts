@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 const X_CLIENT_ID = process.env.X_CLIENT_ID
 const REDIRECT_URI = 'https://clawdsocial.vercel.app/api/auth/x/callback'
 
-export async function GET() {
+export async function GET(request: Request) {
   const { userId } = auth()
   
   if (!userId) {
@@ -14,6 +14,17 @@ export async function GET() {
 
   if (!X_CLIENT_ID) {
     return NextResponse.json({ error: 'X_CLIENT_ID not configured' }, { status: 500 })
+  }
+
+  // Check if we should force logout first for account switching
+  const { searchParams } = new URL(request.url)
+  const forceSwitch = searchParams.get('switch') === 'true'
+  
+  if (forceSwitch) {
+    // Redirect to X logout, then back to auth without switch param
+    const logoutUrl = new URL('https://x.com/logout')
+    logoutUrl.searchParams.set('redirect_after_logout', `https://clawdsocial.vercel.app/api/auth/x?switch_done=true`)
+    return NextResponse.redirect(logoutUrl.toString())
   }
 
   const state = Math.random().toString(36).substring(2, 15)
@@ -26,7 +37,6 @@ export async function GET() {
   authUrl.searchParams.set('state', state)
   authUrl.searchParams.set('code_challenge', 'challenge')
   authUrl.searchParams.set('code_challenge_method', 'plain')
-  authUrl.searchParams.set('force_login', 'true')
 
   // Set cookies for callback
   const response = NextResponse.redirect(authUrl.toString())
