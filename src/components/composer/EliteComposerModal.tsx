@@ -30,6 +30,7 @@ const EMOJIS = ['🔥', '⚡️', '💥', '🚀', '💫', '✨', '🌟', '💪',
 
 export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [], editingPost, analytics }: ComposerModalProps) {
   const [content, setContent] = useState('');
+  const [htmlContent, setHtmlContent] = useState('');
   const [media, setMedia] = useState<MediaFile[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -40,8 +41,10 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
   const [scheduledTime, setScheduledTime] = useState('09:00');
   const [isPosting, setIsPosting] = useState(false);
   const [postStatus, setPostStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isBoldActive, setIsBoldActive] = useState(false);
+  const [isItalicActive, setIsItalicActive] = useState(false);
   
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const xAccount = connectedAccounts.find(a => a.platform === 'X');
@@ -73,36 +76,35 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
     setPostStatus(null);
   };
   
-  // Rich text formatting - insert markdown at cursor
-  const insertFormat = (before: string, after: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-    const newText = content.substring(0, start) + before + selectedText + after + content.substring(end);
-    setContent(newText);
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = selectedText ? start + before.length + selectedText.length : start + before.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
+  // Rich text formatting using execCommand for visual editing
+  const toggleBold = () => {
+    document.execCommand('bold', false);
+    updateActiveStates();
+    updateContentFromEditor();
   };
   
-  const toggleBold = () => insertFormat('**', '**');
-  const toggleItalic = () => insertFormat('*', '*');
+  const toggleItalic = () => {
+    document.execCommand('italic', false);
+    updateActiveStates();
+    updateContentFromEditor();
+  };
+  
+  const updateActiveStates = () => {
+    setIsBoldActive(document.queryCommandState('bold'));
+    setIsItalicActive(document.queryCommandState('italic'));
+  };
+  
+  const updateContentFromEditor = () => {
+    if (editorRef.current) {
+      setHtmlContent(editorRef.current.innerHTML);
+      setContent(editorRef.current.innerText);
+    }
+  };
   
   const insertEmoji = (emoji: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const newText = content.substring(0, start) + emoji + content.substring(start);
-    setContent(newText);
+    document.execCommand('insertText', false, emoji);
+    updateContentFromEditor();
     setShowEmojiPicker(false);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + emoji.length, start + emoji.length);
-    }, 0);
   };
   
   // Media handling
@@ -192,8 +194,8 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
           <div className="flex-1 flex flex-col min-w-0 border-r border-slate-800">
             {/* Toolbar */}
             <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-800">
-              <button onClick={toggleBold} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Bold className="w-4 h-4" /></button>
-              <button onClick={toggleItalic} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Italic className="w-4 h-4" /></button>
+              <button onClick={toggleBold} className={`p-2 rounded-lg transition-colors ${isBoldActive ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Bold className="w-4 h-4" /></button>
+              <button onClick={toggleItalic} className={`p-2 rounded-lg transition-colors ${isItalicActive ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Italic className="w-4 h-4" /></button>
               <div className="w-px h-5 bg-slate-700 mx-1" />
               <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`p-2 rounded-lg transition-colors ${showEmojiPicker ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Smile className="w-4 h-4" /></button>
               <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"><ImageIcon className="w-4 h-4" /></button>
@@ -211,13 +213,16 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                 </div>
               )}
               
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="What's happening?"
-                className="w-full min-h-[200px] bg-transparent text-white text-lg placeholder-slate-600 resize-none focus:outline-none"
+              <div
+                ref={editorRef}
+                contentEditable
+                onInput={updateContentFromEditor}
+                onKeyUp={updateActiveStates}
+                onMouseUp={updateActiveStates}
+                className="w-full min-h-[200px] bg-transparent text-white text-lg placeholder-slate-600 focus:outline-none"
                 style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.5' }}
+                data-placeholder="What's happening?"
+                suppressContentEditableWarning
               />
               
               {media.length > 0 && (
@@ -266,7 +271,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                       {xAccount.profileImageUrl ? <img src={xAccount.profileImageUrl} alt="" className="w-10 h-10 rounded-full object-cover" /> : <div className="w-10 h-10 bg-slate-700 rounded-full" />}
                       <div><p className="text-white font-bold text-sm">{xAccount.accountName || 'Your Name'}</p><p className="text-slate-500 text-sm">@{xAccount.accountHandle || 'username'}</p></div>
                     </div>
-                    <div className="text-white text-[15px] leading-normal whitespace-pre-wrap mb-3" dangerouslySetInnerHTML={{ __html: formatContentForPreview(content) || '<span class="text-slate-600">Your post will appear here...</span>' }} />
+                    <div className="text-white text-[15px] leading-normal whitespace-pre-wrap mb-3" dangerouslySetInnerHTML={{ __html: htmlContent || '<span class="text-slate-600">Your post will appear here...</span>' }} />
                     
                     {media.length > 0 && (
                       <div className={`mb-3 grid gap-0.5 ${media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} rounded-2xl overflow-hidden`}>
