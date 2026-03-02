@@ -569,6 +569,7 @@ export default function DashboardPage() {
         initialDate={editingPost?.scheduledFor}
         connectedAccounts={connectedAccounts}
         editingPost={editingPost}
+        analytics={analytics}
       />
 
       {/* Delete Confirmation Modal */}
