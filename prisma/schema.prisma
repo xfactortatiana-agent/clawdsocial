@@ -252,6 +252,103 @@ model AnalyticsSnapshot {
   @@map("analytics_snapshots")
 }
 
+// Hourly engagement patterns (learned from user's posts)
+model AudienceInsight {
+  id              String    @id @default(cuid())
+  accountId       String
+  
+  // Time bucket (day of week + hour)
+  dayOfWeek       Int       // 0-6 (Sunday-Saturday)
+  hourOfDay       Int       // 0-23
+  
+  // Aggregated performance data
+  postsCount      Int       @default(0)
+  avgImpressions  Float     @default(0)
+  avgEngagements  Float     @default(0)
+  avgLikes        Float     @default(0)
+  avgReplies      Float     @default(0)
+  avgReposts      Float     @default(0)
+  
+  // Calculated score (0-100)
+  performanceScore Float    @default(0)
+  
+  // Confidence level based on data volume
+  confidence      Float     @default(0) // 0-1
+  
+  // Last time this bucket was updated
+  lastUpdated     DateTime  @default(now())
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([accountId, dayOfWeek, hourOfDay])
+  @@index([accountId, performanceScore])
+  @@map("audience_insights")
+}
+
+// Daily rollup of best times (cached for quick access)
+model OptimalTime {
+  id              String    @id @default(cuid())
+  accountId       String
+  
+  // The recommended time slot
+  dayOfWeek       Int       // 0-6
+  hourOfDay       Int       // 0-23
+  minute          Int       @default(0)
+  
+  // Why this time is recommended
+  reason          String    // "High engagement rate", "Audience most active", etc.
+  expectedReach   Int?      // Predicted impressions
+  
+  // Ranking among all slots for this day
+  rank            Int       @default(1)
+  
+  // Data freshness
+  calculatedAt    DateTime  @default(now())
+  
+  @@unique([accountId, dayOfWeek, rank])
+  @@index([accountId, dayOfWeek, rank])
+  @@map("optimal_times")
+}
+
+// Raw post performance data (for continuous learning)
+model PostPerformance {
+  id              String    @id @default(cuid())
+  postId          String    @unique
+  accountId       String
+  
+  // When posted
+  postedAt        DateTime
+  dayOfWeek       Int
+  hourOfDay       Int
+  
+  // Performance metrics
+  impressions     Int       @default(0)
+  engagements     Int       @default(0)
+  likes           Int       @default(0)
+  replies         Int       @default(0)
+  reposts         Int       @default(0)
+  clicks          Int       @default(0)
+  
+  // Calculated rates
+  engagementRate  Decimal?  @db.Decimal(5, 4)
+  
+  // For ML features
+  contentLength   Int       // Character count
+  hasMedia        Boolean   @default(false)
+  mediaCount      Int       @default(0)
+  hasHashtags     Boolean   @default(false)
+  hashtagCount    Int       @default(0)
+  
+  // When data was last synced from X
+  lastSyncedAt    DateTime  @default(now())
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([accountId, postedAt])
+  @@index([accountId, dayOfWeek, hourOfDay])
+  @@map("post_performances")
+}
+
 // Activity log for audit trail
 model ActivityLog {
   id            String    @id @default(cuid())

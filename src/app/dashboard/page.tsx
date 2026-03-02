@@ -505,7 +505,7 @@ export default function DashboardPage() {
                                 className="fixed inset-0 z-10" 
                                 onClick={() => setActiveMenu(null)}
                               />
-                              <div className="absolute right-0 top-full mt-1 w-36 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 py-1">
+                              <div className="absolute right-0 bottom-full mb-1 w-36 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 py-1">
                                 <button
                                   onClick={() => editPost(draft)}
                                   className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"

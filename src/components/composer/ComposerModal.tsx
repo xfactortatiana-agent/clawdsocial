@@ -65,11 +65,12 @@ const emojis = {
   gestures: ['👍', '👏', '🙌', '✌️', '🤝', '👆', '👇', '💯']
 };
 
-const bestTimes = [
-  { label: 'Morning', time: '09:00', desc: '9:00 AM — High engagement' },
-  { label: 'Lunch', time: '12:00', desc: '12:00 PM — Peak activity' },
-  { label: 'Evening', time: '18:00', desc: '6:00 PM — Commute scroll' },
-  { label: 'Night', time: '21:00', desc: '9:00 PM — Relaxation time' },
+// Default times (will be overridden by personalized data)
+const defaultBestTimes = [
+  { label: 'Morning', time: '09:00', desc: '9:00 AM — High engagement', isPersonalized: false, score: 0 },
+  { label: 'Lunch', time: '12:00', desc: '12:00 PM — Peak activity', isPersonalized: false, score: 0 },
+  { label: 'Evening', time: '18:00', desc: '6:00 PM — Commute scroll', isPersonalized: false, score: 0 },
+  { label: 'Night', time: '21:00', desc: '9:00 PM — Relaxation time', isPersonalized: false, score: 0 },
 ];
 
 // Parse content with formatting
@@ -119,11 +120,37 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [bestTimes, setBestTimes] = useState(defaultBestTimes);
+  const [isLoadingBestTimes, setIsLoadingBestTimes] = useState(false);
   
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
 
   const xAccounts = connectedAccounts.filter(a => a.platform === 'X');
   const hasXConnected = xAccounts.length > 0;
+
+  // Fetch personalized best times
+  useEffect(() => {
+    if (isOpen && hasXConnected && xAccounts[0]?.id) {
+      fetchBestTimes();
+    }
+  }, [isOpen, hasXConnected]);
+
+  const fetchBestTimes = async () => {
+    setIsLoadingBestTimes(true);
+    try {
+      const res = await fetch('/api/analytics/best-times');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.times && data.times.length > 0) {
+          setBestTimes(data.times);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch best times:', err);
+    } finally {
+      setIsLoadingBestTimes(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -896,7 +923,18 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                 </div>
 
                 <div>
-                  <p className="text-sm text-slate-400 mb-2">Best times</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-slate-400">Best times</p>
+                    {isLoadingBestTimes && (
+                      <span className="text-xs text-violet-400 animate-pulse">Learning...</span>
+                    )}
+                    {!isLoadingBestTimes && bestTimes.some(t => t.isPersonalized) && (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        Personalized
+                      </span>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     {bestTimes.map((time) => (
                       <button
@@ -913,6 +951,18 @@ export function ComposerModal({ isOpen, onClose, initialDate, connectedAccounts 
                           <span className="text-xs opacity-70">{time.time}</span>
                         </div>
                         <p className="text-xs opacity-60 mt-0.5">{time.desc}</p>
+                        
+                        {time.isPersonalized && time.score > 0 && (
+                          <div className="mt-1.5 flex items-center gap-1">
+                            <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-emerald-400 rounded-full"
+                                style={{ width: `${Math.min((time.score / 1000) * 100, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-emerald-400">{time.score > 1000 ? '1k+' : time.score}</span>
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
