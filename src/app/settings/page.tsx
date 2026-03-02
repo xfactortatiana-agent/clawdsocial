@@ -40,8 +40,11 @@ export default function SettingsPage() {
   };
 
   const handleSwitchAccount = () => {
-    // This will log out of X first, then redirect to auth
-    window.location.href = '/api/auth/x?switch=true';
+    // Open X logout in new tab, then redirect to auth
+    window.open('https://x.com/logout', '_blank');
+    setTimeout(() => {
+      window.location.href = '/api/auth/x';
+    }, 2000);
   };
 
   const handleDisconnectX = async (accountId: string) => {

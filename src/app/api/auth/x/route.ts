@@ -16,17 +16,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'X_CLIENT_ID not configured' }, { status: 500 })
   }
 
-  // Check if we should force logout first for account switching
-  const { searchParams } = new URL(request.url)
-  const forceSwitch = searchParams.get('switch') === 'true'
-  
-  if (forceSwitch) {
-    // Redirect to X logout, then back to auth without switch param
-    const logoutUrl = new URL('https://x.com/logout')
-    logoutUrl.searchParams.set('redirect_after_logout', `https://clawdsocial.vercel.app/api/auth/x?switch_done=true`)
-    return NextResponse.redirect(logoutUrl.toString())
-  }
-
   const state = Math.random().toString(36).substring(2, 15)
 
   const authUrl = new URL('https://twitter.com/i/oauth2/authorize')
