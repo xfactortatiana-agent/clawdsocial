@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { format, isToday, isTomorrow } from "date-fns";
-import { ComposerModal } from "@/components/composer/ComposerModal";
+import { EliteComposerModal as ComposerModal } from "@/components/composer/EliteComposerModal";
 import { UsageWidget } from "@/components/billing/UsageWidget";
 
 interface Post {
