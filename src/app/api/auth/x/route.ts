@@ -26,7 +26,7 @@ export async function GET() {
   authUrl.searchParams.set('state', state)
   authUrl.searchParams.set('code_challenge', 'challenge')
   authUrl.searchParams.set('code_challenge_method', 'plain')
-  authUrl.searchParams.set('prompt', 'select_account')
+  authUrl.searchParams.set('force_login', 'true')
 
   // Set cookies for callback
   const response = NextResponse.redirect(authUrl.toString())
