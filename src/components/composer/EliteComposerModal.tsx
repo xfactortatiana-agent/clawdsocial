@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { 
+import {
   X, Sparkles, Image as ImageIcon, Calendar, Clock, Loader2,
   Bold, Italic, Hash, AtSign, Send, Save, Wand2, Smile,
   BarChart3, Eye, ThumbsUp, MessageCircle, Repeat2, Share,
@@ -45,19 +45,21 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
   const [isItalicActive, setIsItalicActive] = useState(false);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
-  const [cursorPosition, setCursorPosition] = useState(0);
-  
+  const [showLinkEditor, setShowLinkEditor] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkText, setLinkText] = useState('');
+
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const xAccount = connectedAccounts.find(a => a.platform === 'X');
   const charCount = content.length;
   const charLimit = 280;
   const isOverLimit = charCount > charLimit;
-  
+
   // Calculate real predicted performance
   const predictedPerformance = calculatePredictedPerformance(content, media, analytics, xAccount);
-  
+
   useEffect(() => {
     if (isOpen && editingPost) {
       setContent(editingPost.content || '');
@@ -71,78 +73,104 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       resetComposer();
     }
   }, [isOpen, editingPost]);
-  
+
   const resetComposer = () => {
     setContent('');
     setMedia([]);
     setIsScheduled(false);
     setPostStatus(null);
   };
-  
+
+  // Save cursor position before formatting
+  const saveCursorPosition = () => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      return {
+        startContainer: range.startContainer,
+        startOffset: range.startOffset,
+        endContainer: range.endContainer,
+        endOffset: range.endOffset
+      };
+    }
+    return null;
+  };
+
+  // Restore cursor position after formatting
+  const restoreCursorPosition = (saved: any) => {
+    if (!saved || !editorRef.current) return;
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+
+    try {
+      range.setStart(saved.startContainer, saved.startOffset);
+      range.setEnd(saved.endContainer, saved.endOffset);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } catch (e) {
+      // Fallback: just focus at end
+      editorRef.current.focus();
+    }
+  };
+
   // Rich text formatting using execCommand for visual editing
   const toggleBold = () => {
+    const saved = saveCursorPosition();
     document.execCommand('bold', false);
     updateActiveStates();
     updateContentFromEditor();
-    restoreCursor();
+    setTimeout(() => restoreCursorPosition(saved), 0);
   };
-  
+
   const toggleItalic = () => {
+    const saved = saveCursorPosition();
     document.execCommand('italic', false);
     updateActiveStates();
     updateContentFromEditor();
-    restoreCursor();
+    setTimeout(() => restoreCursorPosition(saved), 0);
   };
-  
-  const restoreCursor = () => {
-    // Small delay to let execCommand complete, then focus back
-    setTimeout(() => {
-      if (editorRef.current) {
-        editorRef.current.focus();
-      }
-    }, 0);
-  };
-  
+
   const updateActiveStates = () => {
     setIsBoldActive(document.queryCommandState('bold'));
     setIsItalicActive(document.queryCommandState('italic'));
   };
-  
+
   const updateContentFromEditor = () => {
     if (editorRef.current) {
       let html = editorRef.current.innerHTML;
-      
+
       // Auto-link URLs
       html = html.replace(
         /(https?:\/\/[^\s<]+)/g,
         '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>'
       );
-      
+
       // Highlight hashtags
       html = html.replace(
         /(^|\s)(#[a-zA-Z0-9_]+)/g,
         '$1<span class="text-blue-400">$2</span>'
       );
-      
+
       // Only update if changed to avoid cursor jumping
       if (html !== editorRef.current.innerHTML) {
         const selection = window.getSelection();
         const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-        
+
         editorRef.current.innerHTML = html;
-        
+
         // Restore cursor
         if (range && selection) {
           selection.removeAllRanges();
           selection.addRange(range);
         }
       }
-      
+
       setHtmlContent(html);
       setContent(editorRef.current.innerText);
     }
   };
-  
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Check for @ to trigger mentions
     if (e.key === '@') {
@@ -154,21 +182,48 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       setShowMentions(false);
     }
   };
-  
+
   const insertMention = (username: string) => {
     document.execCommand('insertText', false, `@${username} `);
     updateContentFromEditor();
     setShowMentions(false);
-    restoreCursor();
   };
-  
+
+  const openLinkEditor = () => {
+    const selection = window.getSelection()?.toString();
+    if (selection) {
+      setLinkText(selection);
+    }
+    setShowLinkEditor(true);
+    setLinkUrl('');
+  };
+
+  const insertLink = () => {
+    if (!linkUrl) return;
+
+    const saved = saveCursorPosition();
+
+    // If text is selected, replace it with link
+    if (linkText) {
+      document.execCommand('insertHTML', false, `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">${linkText}</a>`);
+    } else {
+      // Insert new link
+      document.execCommand('createLink', false, linkUrl);
+    }
+
+    updateContentFromEditor();
+    setShowLinkEditor(false);
+    setLinkUrl('');
+    setLinkText('');
+    setTimeout(() => restoreCursorPosition(saved), 0);
+  };
+
   const insertEmoji = (emoji: string) => {
     document.execCommand('insertText', false, emoji);
     updateContentFromEditor();
     setShowEmojiPicker(false);
-    restoreCursor();
   };
-  
+
   // Media handling
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -179,11 +234,11 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       setMedia(prev => [...prev, { id: Math.random().toString(36), url, type, file }]);
     });
   };
-  
+
   const removeMedia = (id: string) => {
     setMedia(prev => prev.filter(m => m.id !== id));
   };
-  
+
   // AI Generation
   const handleAIAction = async (action: string) => {
     setIsGenerating(true);
@@ -203,7 +258,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       setIsGenerating(false);
     }
   };
-  
+
   // Publish
   const handlePublish = async () => {
     if (!content.trim() || isOverLimit) return;
@@ -231,9 +286,9 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       setIsPosting(false);
     }
   };
-  
+
   if (!isOpen) return null;
-  
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-sm" onClick={onClose} />
@@ -249,7 +304,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
         </div>
-        
+
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left - Editor */}
@@ -258,13 +313,14 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
             <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-800">
               <button onClick={toggleBold} className={`p-2 rounded-lg transition-colors ${isBoldActive ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Bold className="w-4 h-4" /></button>
               <button onClick={toggleItalic} className={`p-2 rounded-lg transition-colors ${isItalicActive ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Italic className="w-4 h-4" /></button>
+              <button onClick={openLinkEditor} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white" title="Insert Link"><LinkIcon className="w-4 h-4" /></button>
               <div className="w-px h-5 bg-slate-700 mx-1" />
               <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`p-2 rounded-lg transition-colors ${showEmojiPicker ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Smile className="w-4 h-4" /></button>
               <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"><ImageIcon className="w-4 h-4" /></button>
               <div className="flex-1" />
               <button onClick={() => setShowAIPanel(!showAIPanel)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showAIPanel ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Wand2 className="w-4 h-4" />AI</button>
             </div>
-            
+
             {/* Editor Area */}
             <div className="flex-1 overflow-y-auto p-6">
               {showEmojiPicker && (
@@ -274,7 +330,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                   ))}</div>
                 </div>
               )}
-              
+
               <div
                 ref={editorRef}
                 contentEditable
@@ -287,24 +343,48 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                 data-placeholder="What's happening?"
                 suppressContentEditableWarning
               />
-              
-              {/* Mentions Dropdown */}
-              {showMentions && (
-                <div className="absolute mt-2 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 py-2">
-                  <p className="px-4 py-2 text-xs text-slate-500 uppercase">Mention someone</p>
-                  {['username1', 'username2', 'username3'].map(user => (
-                    <button
-                      key={user}
-                      onClick={() => insertMention(user)}
-                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
-                    >
-                      <span className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center text-xs">@{user[0]}</span>
-                      {user}
+
+              {/* Link Editor Modal */}
+              {showLinkEditor && (
+                <div className="absolute mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-white">Insert Link</h3>
+                    <button onClick={() => setShowLinkEditor(false)} className="text-slate-400 hover:text-white">
+                      <X className="w-4 h-4" />
                     </button>
-                  ))}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">URL</label>
+                      <input
+                        type="url"
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        placeholder="https://example.com"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">Text (optional)</label>
+                      <input
+                        type="text"
+                        value={linkText}
+                        onChange={(e) => setLinkText(e.target.value)}
+                        placeholder="Link text"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      />
+                    </div>
+                    <button
+                      onClick={insertLink}
+                      disabled={!linkUrl}
+                      className="w-full py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Insert Link
+                    </button>
+                  </div>
                 </div>
               )}
-              
+
               {media.length > 0 && (
                 <div className={`mt-4 grid gap-2 ${media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   {media.map(file => (
@@ -315,10 +395,10 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                   ))}
                 </div>
               )}
-              
+
               <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFileUpload} className="hidden" />
             </div>
-            
+
             {/* Footer */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800">
               <div className="flex items-center gap-4">
@@ -338,7 +418,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
               </div>
             </div>
           </div>
-          
+
           {/* Right - Live Preview & Analytics */}
           <div className="w-96 bg-slate-900/50 flex flex-col overflow-y-auto">
             {/* Preview Card */}
@@ -352,7 +432,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                       <div><p className="text-white font-bold text-sm">{xAccount.accountName || 'Your Name'}</p><p className="text-slate-500 text-sm">@{xAccount.accountHandle || 'username'}</p></div>
                     </div>
                     <div className="text-white text-[15px] leading-normal whitespace-pre-wrap mb-3" dangerouslySetInnerHTML={{ __html: htmlContent || '<span class="text-slate-600">Your post will appear here...</span>' }} />
-                    
+
                     {media.length > 0 && (
                       <div className={`mb-3 grid gap-0.5 ${media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} rounded-2xl overflow-hidden`}>
                         {media.slice(0, 4).map(file => (
@@ -362,7 +442,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                         ))}
                       </div>
                     )}
-                    
+
                     <div className="flex items-center justify-between text-slate-500 pt-2">
                       <div className="flex items-center gap-1"><MessageCircle className="w-4 h-4" /><span className="text-xs">0</span></div>
                       <div className="flex items-center gap-1"><Repeat2 className="w-4 h-4" /><span className="text-xs">0</span></div>
@@ -376,34 +456,34 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
                 <div className="text-center py-8 text-slate-500"><p>Connect X to see preview</p></div>
               )}
             </div>
-            
+
             {/* Real Predicted Performance */}
             <div className="p-4 border-b border-slate-800">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-slate-400">Predicted Performance</h3>
                 {predictedPerformance.confidence < 0.3 && <span className="text-xs text-amber-400">Learning...</span>}
               </div>
-              
+
               <div className="space-y-3">
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1"><span className="text-slate-400">Estimated Reach</span><span className={getScoreColor(predictedPerformance.reachScore)}>{predictedPerformance.reachLabel}</span></div>
                   <div className="h-2 bg-slate-700 rounded-full overflow-hidden"><div className={`h-full rounded-full ${getScoreBgColor(predictedPerformance.reachScore)}`} style={{ width: `${predictedPerformance.reachScore}%` }} /></div>
                 </div>
-                
+
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1"><span className="text-slate-400">Engagement Potential</span><span className={getScoreColor(predictedPerformance.engagementScore)}>{predictedPerformance.engagementLabel}</span></div>
                   <div className="h-2 bg-slate-700 rounded-full overflow-hidden"><div className={`h-full rounded-full ${getScoreBgColor(predictedPerformance.engagementScore)}`} style={{ width: `${predictedPerformance.engagementScore}%` }} /></div>
                 </div>
-                
+
                 {predictedPerformance.estimatedImpressions > 0 && (
                   <div className="pt-2 border-t border-slate-800">
                     <div className="flex items-center justify-between text-sm"><span className="text-slate-400">Est. Impressions</span><span className="text-white font-medium">{predictedPerformance.estimatedImpressions.toLocaleString()}</span></div>
                     <div className="flex items-center justify-between text-sm mt-1"><span className="text-slate-400">Est. Engagements</span><span className="text-white font-medium">{predictedPerformance.estimatedEngagements.toLocaleString()}</span></div>
                   </div>
                 )}
-              </div>            
+              </div>
             </div>
-            
+
             {/* AI Panel */}
             {showAIPanel && (
               <div className="p-4">
@@ -427,7 +507,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
             )}
           </div>
         </div>
-        
+
         {/* Schedule Panel */}
         {isScheduled && (
           <div className="px-6 py-4 border-t border-slate-800 bg-slate-900/50">
@@ -439,7 +519,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
             </div>
           </div>
         )}
-        
+
         {/* Status Toast */}
         {postStatus && (
           <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-medium ${postStatus.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{postStatus.message}</div>
@@ -468,36 +548,36 @@ function calculatePredictedPerformance(content: string, media: MediaFile[], anal
   let confidence = 0;
   let estimatedImpressions = 0;
   let estimatedEngagements = 0;
-  
+
   // If we have analytics data, use it
   if (analytics?.avgImpressions && analytics?.avgEngagementRate) {
     confidence = Math.min(analytics.postsAnalyzed / 20, 1); // Max confidence at 20 posts
-    
+
     // Base estimates on historical performance
     estimatedImpressions = Math.round(analytics.avgImpressions);
     estimatedEngagements = Math.round(analytics.avgImpressions * analytics.avgEngagementRate);
-    
+
     // Adjust based on content factors
     let contentMultiplier = 1;
-    
+
     // Length factor - optimal is 100-200 chars
     if (content.length > 50 && content.length < 200) contentMultiplier += 0.1;
     if (content.length > 280) contentMultiplier -= 0.2;
-    
+
     // Media factor
     if (media.length > 0) contentMultiplier += 0.15;
     if (media.length >= 2) contentMultiplier += 0.1;
-    
+
     // Hashtag factor
     const hashtagCount = (content.match(/#/g) || []).length;
     if (hashtagCount >= 1 && hashtagCount <= 3) contentMultiplier += 0.05;
-    
+
     // Question factor (engagement driver)
     if (content.includes('?')) contentMultiplier += 0.1;
-    
+
     estimatedImpressions = Math.round(estimatedImpressions * contentMultiplier);
     estimatedEngagements = Math.round(estimatedEngagements * contentMultiplier);
-    
+
     // Calculate scores (0-100)
     const followerCount = account?.followerCount || 1000;
     reachScore = Math.min(Math.round((estimatedImpressions / followerCount) * 100), 100);
@@ -505,19 +585,19 @@ function calculatePredictedPerformance(content: string, media: MediaFile[], anal
   } else {
     // No data yet - use content-based heuristics
     confidence = 0;
-    
+
     if (content.length > 0) {
       // Basic content scoring
       reachScore = 30;
       engagementScore = 30;
-      
+
       if (content.length > 50) { reachScore += 10; engagementScore += 10; }
       if (media.length > 0) { reachScore += 15; engagementScore += 15; }
       if (content.includes('?')) engagementScore += 10;
       if ((content.match(/#/g) || []).length > 0) { reachScore += 5; engagementScore += 5; }
     }
   }
-  
+
   return {
     reachScore,
     engagementScore,
