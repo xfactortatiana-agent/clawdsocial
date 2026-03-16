@@ -7,8 +7,9 @@ import {
   Bold, Italic, Hash, AtSign, Send, Save, Wand2, Smile,
   BarChart3, Eye, ThumbsUp, MessageCircle, Repeat2, Share,
   Flame, Scissors, ListOrdered, Target, Zap, ChevronDown,
-  Type, Link as LinkIcon, AlertCircle
+  Type, Link as LinkIcon, AlertCircle, Library
 } from "lucide-react";
+import { MediaLibrary } from "@/components/media/MediaLibrary";
 
 interface ComposerModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface ComposerModalProps {
   connectedAccounts?: any[];
   editingPost?: any | null;
   analytics?: any;
+  workspaceId?: string;
 }
 
 interface MediaFile {
@@ -28,7 +30,7 @@ interface MediaFile {
 
 const EMOJIS = ['🔥', '⚡️', '💥', '🚀', '💫', '✨', '🌟', '💪', '❤️', '👍', '🎉', '🤯', '👏', '💯', '😂', '🤔', '😍', '💡', '🎯', '📊', '💰', '🔑', '📈', '🎁', '🏆', '⭐', '💎'];
 
-export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [], editingPost, analytics }: ComposerModalProps) {
+export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAccounts = [], editingPost, analytics, workspaceId = 'default' }: ComposerModalProps) {
   const [content, setContent] = useState('');
   const [htmlContent, setHtmlContent] = useState('');
   const [media, setMedia] = useState<MediaFile[]>([]);
@@ -48,7 +50,8 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
   const [showLinkEditor, setShowLinkEditor] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
-
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -137,7 +140,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
 
   const insertLink = () => {
     if (!linkUrl) return;
-    
+
     // If text is selected, replace it with link
     if (linkText) {
       document.execCommand('insertHTML', false, `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">${linkText}</a>`);
@@ -145,7 +148,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
       // Insert new link
       document.execCommand('createLink', false, linkUrl);
     }
-    
+
     updateContentFromEditor();
     setShowLinkEditor(false);
     setLinkUrl('');
@@ -251,6 +254,7 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
               <div className="w-px h-5 bg-slate-700 mx-1" />
               <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`p-2 rounded-lg transition-colors ${showEmojiPicker ? 'bg-violet-600/20 text-violet-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Smile className="w-4 h-4" /></button>
               <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"><ImageIcon className="w-4 h-4" /></button>
+              <button onClick={() => setShowMediaLibrary(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white" title="Media Library"><Library className="w-4 h-4" /></button>
               <div className="flex-1" />
               <button onClick={() => setShowAIPanel(!showAIPanel)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showAIPanel ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><Wand2 className="w-4 h-4" />AI</button>
             </div>
@@ -458,6 +462,22 @@ export function EliteComposerModal({ isOpen, onClose, initialDate, connectedAcco
         {postStatus && (
           <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-medium ${postStatus.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{postStatus.message}</div>
         )}
+
+        {/* Media Library Modal */}
+        <MediaLibrary
+          workspaceId={workspaceId}
+          isOpen={showMediaLibrary}
+          onClose={() => setShowMediaLibrary(false)}
+          onSelect={(assets) => {
+            const newMedia: MediaFile[] = assets.map(asset => ({
+              id: asset.id,
+              url: asset.url,
+              type: (asset.type === 'VIDEO' ? 'video' : 'image') as 'video' | 'image'
+            }));
+            setMedia(prev => [...prev, ...newMedia].slice(0, 4));
+          }}
+          maxSelection={4 - media.length}
+        />
       </div>
     </div>
   );

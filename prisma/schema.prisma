@@ -204,7 +204,76 @@ model MediaAsset {
   uploadedById  String
   createdAt     DateTime  @default(now())
 
+  @@index([workspaceId, createdAt])
   @@map("media_assets")
+}
+
+// Content Queue - auto-fill scheduling slots
+model ContentQueue {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  accountId     String
+  
+  // Queue configuration
+  name          String    @default("Default Queue")
+  isActive      Boolean   @default(true)
+  
+  // Time slots (JSON array of {day: 0-6, hour: 0-23, minute: 0-59})
+  timeSlots     Json      @default("[]")
+  
+  // Content sources
+  useEvergreen  Boolean   @default(false)  // Recycle top performing posts
+  useAiDrafts   Boolean   @default(true)   // Use AI-generated drafts
+  useTemplates  Boolean   @default(true)   // Use templates
+  
+  // Filters
+  categories    String[]  @default([])     // Only use posts from these categories
+  tags          String[]  @default([])     // Only use posts with these tags
+  
+  // Limits
+  maxPerDay     Int       @default(5)
+  minInterval   Int       @default(60)     // Minutes between posts
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId, accountId, isActive])
+  @@map("content_queues")
+}
+
+// Queue items (posts scheduled via queue)
+model QueueItem {
+  id            String    @id @default(cuid())
+  queueId       String
+  postId        String?
+  
+  // If auto-generated from template/evergreen
+  sourceType    String?   // TEMPLATE, EVERGREEN, AI_GENERATED
+  sourceId      String?   // Template ID or original post ID
+  
+  // Scheduling
+  scheduledSlot DateTime  // The time slot this occupies
+  status        QueueItemStatus @default(PENDING)
+  
+  // If published
+  publishedPostId String?
+  publishedAt   DateTime?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([queueId, scheduledSlot])
+  @@index([queueId, status])
+  @@map("queue_items")
+}
+
+enum QueueItemStatus {
+  PENDING
+  READY
+  SCHEDULED
+  PUBLISHED
+  SKIPPED
+  FAILED
 }
 
 // Templates for reusable content
